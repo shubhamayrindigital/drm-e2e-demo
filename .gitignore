@@ -1,0 +1,42 @@
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Backend
+backend/node_modules/
+backend/dist/
+backend/build/
+backend/.turbo/
+backend/prisma/*.db
+backend/prisma/*.db-journal
+backend/.env*
+
+# Web
+web/node_modules/
+web/dist/
+web/build/
+
+# Packager
+packager/bbb_*.mp4
+packager/out/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+node_modules/
+dist/
+build/
+*.log
+pnpm-lock.yaml
+package-lock.json
+yarn.lock

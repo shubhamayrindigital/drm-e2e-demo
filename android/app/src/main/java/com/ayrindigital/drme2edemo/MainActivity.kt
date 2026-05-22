@@ -1,0 +1,76 @@
+package com.ayrindigital.drme2edemo
+
+import android.os.Bundle
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.rememberNavController
+import com.ayrindigital.drme2edemo.ui.auth.AuthViewModel
+import com.ayrindigital.drme2edemo.ui.auth.LoginScreen
+import com.ayrindigital.drme2edemo.ui.catalog.CatalogScreen
+import com.ayrindigital.drme2edemo.ui.catalog.CatalogViewModel
+import com.ayrindigital.drme2edemo.ui.player.PlayerScreen
+import com.ayrindigital.drme2edemo.ui.player.PlayerViewModel
+import com.ayrindigital.drme2edemo.ui.theme.DRME2EDemoTheme
+import dagger.hilt.android.AndroidEntryPoint
+
+@AndroidEntryPoint
+class MainActivity : ComponentActivity() {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        enableEdgeToEdge()
+        setContent {
+            DRME2EDemoTheme {
+                AppNavHost()
+            }
+        }
+    }
+}
+
+@Composable
+fun AppNavHost() {
+    val navController = rememberNavController()
+    val authViewModel: AuthViewModel = hiltViewModel()
+    val userEmail by authViewModel.userEmail.collectAsState()
+
+    NavHost(
+        navController = navController,
+        startDestination = if (userEmail != null) "catalog" else "login",
+    ) {
+        composable("login") {
+            LoginScreen(
+                onLoginSuccess = {
+                    navController.navigate("catalog") {
+                        popUpTo("login") { inclusive = true }
+                    }
+                },
+                viewModel = authViewModel,
+            )
+        }
+
+        composable("catalog") {
+            val catalogViewModel: CatalogViewModel = hiltViewModel()
+            CatalogScreen(
+                viewModel = catalogViewModel,
+                onContentSelected = { contentId ->
+                    navController.navigate("player/$contentId")
+                },
+            )
+        }
+
+        composable("player/{contentId}") { backStackEntry ->
+            val contentId = backStackEntry.arguments?.getString("contentId") ?: return@composable
+            val playerViewModel: PlayerViewModel = hiltViewModel()
+            PlayerScreen(
+                contentId = contentId,
+                viewModel = playerViewModel,
+            )
+        }
+    }
+}

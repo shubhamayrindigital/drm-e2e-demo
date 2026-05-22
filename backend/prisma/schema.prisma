@@ -1,0 +1,59 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  entitlements    Entitlement[]
+  offlineLicenses OfflineLicense[]
+}
+
+model Content {
+  id           String  @id
+  title        String
+  description  String?
+  drm          Boolean @default(false)
+  manifestPath String  // e.g., "vod/drm-bbb/manifest.mpd"
+  kid          String? // Widevine Key ID (hex), null if non-DRM
+  cek          String? // Content Encryption Key (hex), null if non-DRM. POC only; prod uses KMS.
+  pssh         String? // PSSH box (base64) for Widevine signaling
+
+  entitlements Entitlement[]
+}
+
+model Entitlement {
+  id        String   @id @default(cuid())
+  userId    String
+  contentId String
+  grantedAt DateTime @default(now())
+  expiresAt DateTime? // null = no expiry
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  content Content @relation(fields: [contentId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, contentId])
+}
+
+model OfflineLicense {
+  id        String   @id @default(cuid())
+  userId    String
+  contentId String
+  keysetId  String   // opaque Widevine keyset ID from MediaDrm
+  issuedAt  DateTime @default(now())
+  expiresAt DateTime // TTL for offline playback (server-side mirror of CDM license duration)
+  revoked   Boolean  @default(false)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, contentId])
+}
