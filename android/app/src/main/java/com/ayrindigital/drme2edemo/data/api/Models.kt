@@ -45,3 +45,18 @@ data class ContentDetail(
 data class EntitlementGrantResponse(
     val ok: Boolean,
 )
+
+@Serializable
+data class PlayManifestResponse(
+    val manifestUrl: String,
+    val licenseUrl: String,
+    val playbackToken: String,
+    val drmConfig: DrmConfig? = null,
+)
+
+@Serializable
+data class DrmConfig(
+    val kid: String,
+    val cek: String,
+    val pssh: String,
+)

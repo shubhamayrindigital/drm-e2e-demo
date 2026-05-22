@@ -1,7 +1,9 @@
 import { Router, Request, Response } from 'express';
+import jwt from 'jsonwebtoken';
 import { authMiddleware } from '../auth/middleware.js';
 import { catalogService } from './service.js';
 import { logger } from '../utils/logger.js';
+import { config } from '../utils/config.js';
 
 const router = Router();
 
@@ -39,6 +41,22 @@ router.post('/:id/entitle', authMiddleware, async (req: Request, res: Response) 
   } catch (error) {
     logger.error(error);
     res.status(500).json({ error: 'Failed to grant entitlement' });
+  }
+});
+
+// Get manifest + playback token for entitled content
+router.get('/:id/play', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const manifest = await catalogService.getPlayManifest(req.user!.userId, req.params.id);
+    const playbackToken = jwt.sign(
+      { userId: req.user!.userId, contentId: req.params.id },
+      config.JWT_SECRET,
+      { expiresIn: '5m' },
+    );
+    res.json({ ...manifest, playbackToken });
+  } catch (error) {
+    logger.error(error);
+    res.status(403).json({ error: 'Not entitled to this content' });
   }
 });
 

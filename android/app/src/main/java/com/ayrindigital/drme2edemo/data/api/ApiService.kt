@@ -23,6 +23,9 @@ interface ApiService {
     @POST("catalog/{id}/entitle")
     suspend fun grantEntitlement(@Path("id") id: String): EntitlementGrantResponse
 
+    @GET("catalog/{id}/play")
+    suspend fun getPlayManifest(@Path("id") id: String): PlayManifestResponse
+
     // License (expects binary response)
     @POST("license/widevine")
     suspend fun getWidevineLicense(@Body challenge: ByteArray): ByteArray

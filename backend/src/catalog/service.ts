@@ -32,6 +32,41 @@ export class CatalogService {
       create: { userId, contentId },
     });
   }
+
+  async getPlayManifest(userId: string, contentId: string) {
+    const content = await prisma.content.findUnique({
+      where: { id: contentId },
+      include: {
+        entitlements: {
+          where: { userId },
+          select: { id: true },
+        },
+      },
+    });
+
+    if (!content || content.entitlements.length === 0) {
+      throw new Error('Not entitled to this content');
+    }
+
+    // For now, manifest URLs are local or static. In prod, would use R2 signed URLs.
+    const baseUrl = process.env.MANIFEST_BASE_URL || 'http://localhost:3000/manifests';
+    const manifestUrl = `${baseUrl}/${content.manifestPath}`;
+
+    const result: any = {
+      manifestUrl,
+      licenseUrl: 'http://localhost:3000/license/widevine',
+    };
+
+    if (content.drm) {
+      result.drmConfig = {
+        kid: content.kid,
+        cek: content.cek,
+        pssh: content.pssh,
+      };
+    }
+
+    return result;
+  }
 }
 
 export const catalogService = new CatalogService();
