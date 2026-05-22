@@ -56,8 +56,10 @@ fun AppNavHost() {
 
         composable("catalog") {
             val catalogViewModel: CatalogViewModel = hiltViewModel()
+            val downloadViewModel: com.ayrindigital.drme2edemo.ui.downloads.DownloadViewModel = hiltViewModel()
             CatalogScreen(
                 viewModel = catalogViewModel,
+                downloadViewModel = downloadViewModel,
                 onContentSelected = { contentId ->
                     navController.navigate("player/$contentId")
                 },

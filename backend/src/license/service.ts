@@ -91,10 +91,14 @@ export class LicenseService {
       throw new Error('License not found or revoked');
     }
 
-    // For now, just return a placeholder
-    // In production, this would re-issue via the license server
-    logger.info({ userId, contentId }, 'Offline license renewed');
+    // Update TTL for offline license
+    const expiresAt = new Date(Date.now() + config.OFFLINE_LICENSE_TTL_SECONDS * 1000);
+    await prisma.offlineLicense.update({
+      where: { userId_contentId: { userId, contentId } },
+      data: { expiresAt, issuedAt: new Date() },
+    });
 
+    logger.info({ userId, contentId, expiresAt }, 'Offline license renewed');
     return Buffer.from('renewed-license-blob');
   }
 }
