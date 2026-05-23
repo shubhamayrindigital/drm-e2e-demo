@@ -27,33 +27,7 @@ class DemoDownloadService : DownloadService(
     R.string.app_name,
     0,
 ) {
-    override fun getDownloadManager(): DownloadManager {
-        synchronized(Companion.downloadManagerLock) {
-            if (Companion.downloadManager != null) return Companion.downloadManager!!
-
-            val databaseProvider = StandaloneDatabaseProvider(this)
-            val cacheDir = File(getExternalFilesDir(null), "downloads")
-            cacheDir.mkdirs()
-
-            val downloadIndex = DefaultDownloadIndex(databaseProvider)
-            val cache = SimpleCache(cacheDir, LeastRecentlyUsedCacheEvictor(100 * 1024 * 1024))
-
-            val okHttpClient = OkHttpClient.Builder()
-                .connectTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
-                .readTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
-                .build()
-
-            val httpDataSourceFactory = OkHttpDataSource.Factory(okHttpClient)
-            val cacheDataSourceFactory = CacheDataSource.Factory()
-                .setCache(cache)
-                .setUpstreamDataSourceFactory(httpDataSourceFactory)
-
-            val downloaderFactory = DefaultDownloaderFactory(cacheDataSourceFactory)
-
-            Companion.downloadManager = DownloadManager(this, downloadIndex, downloaderFactory)
-            return Companion.downloadManager!!
-        }
-    }
+    override fun getDownloadManager(): DownloadManager = downloadManager
 
     override fun getScheduler(): Scheduler? = null
 
@@ -80,8 +54,30 @@ class DemoDownloadService : DownloadService(
     companion object {
         private const val FOREGROUND_NOTIFICATION_ID = 1
         private const val CHANNEL_ID = "download_channel"
-        private var downloadManager: DownloadManager? = null
-        private val downloadManagerLock = Object()
+
+        private var serviceInstance: DemoDownloadService? = null
+
+        private val downloadManager by lazy {
+            val context = serviceInstance ?: error("Service not initialized")
+            val databaseProvider = StandaloneDatabaseProvider(context)
+            val cacheDir = File(context.getExternalFilesDir(null), "downloads")
+            cacheDir.mkdirs()
+
+            val downloadIndex = DefaultDownloadIndex(databaseProvider)
+            val cache = SimpleCache(cacheDir, LeastRecentlyUsedCacheEvictor(100 * 1024 * 1024))
+
+            val okHttpClient = OkHttpClient.Builder()
+                .connectTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+                .readTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+                .build()
+
+            val httpDataSourceFactory = OkHttpDataSource.Factory(okHttpClient)
+            val cacheDataSourceFactory = CacheDataSource.Factory()
+                .setCache(cache)
+                .setUpstreamDataSourceFactory(httpDataSourceFactory)
+
+            DownloadManager(context, DefaultDownloadIndex(databaseProvider), DefaultDownloaderFactory(cacheDataSourceFactory))
+        }
 
         fun startDownload(context: Context, contentId: String, manifestUrl: String) {
             val request = DownloadRequest.Builder(contentId, Uri.parse(manifestUrl)).build()
@@ -101,5 +97,9 @@ class DemoDownloadService : DownloadService(
         fun removeDownload(context: Context, id: String) {
             sendRemoveDownload(context, DemoDownloadService::class.java, id, /* foreground = */ false)
         }
+    }
+
+    init {
+        serviceInstance = this
     }
 }
