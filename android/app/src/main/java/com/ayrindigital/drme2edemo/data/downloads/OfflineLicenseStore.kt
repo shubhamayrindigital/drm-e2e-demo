@@ -15,7 +15,7 @@ private val Context.offlineLicenseDataStore by preferencesDataStore(name = "offl
 class OfflineLicenseStore @Inject constructor(
     @ApplicationContext private val context: Context,
 ) {
-    private fun keyFor(contentId: String) = stringPreferencesKey("ks_$contentId")
+    private fun keyFor(contentId: String) = stringPreferencesKey("lic_$contentId")
 
     suspend fun put(contentId: String, keySetId: ByteArray) {
         context.offlineLicenseDataStore.edit { it[keyFor(contentId)] = keySetId.toBase64() }

@@ -2,18 +2,13 @@ package com.ayrindigital.drme2edemo.data.downloads
 
 import android.content.Context
 import android.util.Log
-import androidx.media3.common.C
-import androidx.media3.datasource.okhttp.OkHttpDataSource
-import androidx.media3.exoplayer.dash.DashUtil
-import androidx.media3.exoplayer.drm.DefaultDrmSessionManager
-import androidx.media3.exoplayer.drm.DrmSessionEventListener
-import androidx.media3.exoplayer.drm.FrameworkMediaDrm
-import androidx.media3.exoplayer.drm.HttpMediaDrmCallback
-import androidx.media3.exoplayer.drm.OfflineLicenseHelper
 import androidx.media3.exoplayer.offline.Download
 import androidx.media3.exoplayer.offline.DownloadManager
 import com.ayrindigital.drme2edemo.data.api.ApiService
 import com.ayrindigital.drme2edemo.downloads.DemoDownloadService
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -94,36 +89,38 @@ class DownloadRepository @Inject constructor(
         DemoDownloadService.removeDownload(context, contentId)
     }
 
-    suspend fun getOfflineKeySetId(contentId: String): ByteArray? = offlineLicenseStore.get(contentId)
+    suspend fun getCachedLicense(contentId: String): ByteArray? = offlineLicenseStore.get(contentId)
 
+    /**
+     * For ClearKey content, fetches the license JSON from the server and caches it locally.
+     * On the Android emulator the ClearKey CDM does not implement restoreKeys (persistent sessions),
+     * so we cannot rely on OfflineLicenseHelper's keySetId mechanism. Instead, we cache the raw
+     * license bytes and replay them through a custom MediaDrmCallback during playback.
+     */
     private suspend fun maybeFetchOfflineLicense(contentId: String) {
         val playManifest = runCatching { apiService.getPlayManifest(contentId) }.getOrNull() ?: return
         if (playManifest.drmConfig == null) return
         if (offlineLicenseStore.get(contentId) != null) return
 
-        val licenseUrl = playManifest.licenseUrl
         Log.d(tag, "Fetching offline license for $contentId")
-        val httpFactory = OkHttpDataSource.Factory(okHttpClient)
-        val drmCallback = HttpMediaDrmCallback(licenseUrl, httpFactory).apply {
-            setKeyRequestProperty("x-content-id", contentId)
-            setKeyRequestProperty("Content-Type", "application/json")
-        }
-        val drmSessionManager = DefaultDrmSessionManager.Builder()
-            .setUuidAndExoMediaDrmProvider(C.CLEARKEY_UUID) { FrameworkMediaDrm.newInstance(C.CLEARKEY_UUID) }
-            .build(drmCallback)
-        val helper = OfflineLicenseHelper(drmSessionManager, DrmSessionEventListener.EventDispatcher())
+        val body = """{"kids":[],"type":"temporary"}""".toRequestBody("application/json".toMediaType())
+        val request = Request.Builder()
+            .url(playManifest.licenseUrl)
+            .header("x-content-id", contentId)
+            .post(body)
+            .build()
         try {
-            val dataSource = httpFactory.createDataSource()
-            val dashManifest = DashUtil.loadManifest(dataSource, android.net.Uri.parse(playManifest.manifestUrl))
-            val format = DashUtil.loadFormatWithDrmInitData(dataSource, dashManifest.getPeriod(0))
-                ?: error("No DRM init data in manifest")
-            val keySetId = helper.downloadLicense(format)
-            offlineLicenseStore.put(contentId, keySetId)
-            Log.d(tag, "Offline license stored for $contentId (${keySetId.size} bytes)")
+            okHttpClient.newCall(request).execute().use { resp ->
+                if (!resp.isSuccessful) {
+                    Log.e(tag, "License pre-fetch failed: ${resp.code}")
+                    return
+                }
+                val bytes = resp.body?.bytes() ?: return
+                offlineLicenseStore.put(contentId, bytes)
+                Log.d(tag, "Offline license cached for $contentId (${bytes.size} bytes)")
+            }
         } catch (e: Exception) {
             Log.e(tag, "Offline license fetch failed for $contentId", e)
-        } finally {
-            helper.release()
         }
     }
 

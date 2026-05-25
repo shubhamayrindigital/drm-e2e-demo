@@ -73,12 +73,18 @@ class PlayerViewModel @Inject constructor(
     }
 
     private suspend fun buildOfflinePlayData(contentId: String): Pair<ContentDetail, PlayManifestResponse>? {
-        val download = downloadManager.downloadIndex.getDownload(contentId) ?: return null
+        val download = downloadManager.downloadIndex.getDownload(contentId)
+        if (download == null) {
+            Log.d("PlayerViewModel", "No local download for $contentId")
+            return null
+        }
+        Log.d("PlayerViewModel", "Download for $contentId state=${download.state} bytes=${download.bytesDownloaded}/${download.contentLength}")
         if (download.state != Download.STATE_COMPLETED) return null
 
-        val keySetId = offlineLicenseStore.get(contentId)
-        val isDrm = keySetId != null
+        val cachedLicense = offlineLicenseStore.get(contentId)
+        val isDrm = cachedLicense != null
         val manifestUrl = download.request.uri.toString()
+        Log.d("PlayerViewModel", "Using offline data: isDrm=$isDrm manifestUrl=$manifestUrl")
 
         val detail = ContentDetail(
             id = contentId,
@@ -100,7 +106,13 @@ class PlayerViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 val content = _content.value ?: return@launch
-                val player = playerManager.getOrCreatePlayer(content, contentId)
+                val manifest = _manifest.value ?: return@launch
+                val player = playerManager.getOrCreatePlayer(
+                    content = content,
+                    contentId = contentId,
+                    manifestUrl = manifest.manifestUrl,
+                    licenseUrl = manifest.licenseUrl,
+                )
                 this@PlayerViewModel.playerManager = playerManager
                 _player.value = player
             } catch (e: Exception) {

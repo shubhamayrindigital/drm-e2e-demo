@@ -25,24 +25,22 @@ class PlayerManager(
 ) {
     private var exoPlayer: ExoPlayer? = null
 
-    suspend fun getOrCreatePlayer(content: ContentDetail, contentId: String): ExoPlayer {
+    suspend fun getOrCreatePlayer(content: ContentDetail, contentId: String, manifestUrl: String, licenseUrl: String): ExoPlayer {
         if (exoPlayer != null) {
             return exoPlayer!!
         }
 
-        val manifest = apiService.getPlayManifest(contentId)
         val httpFactory = OkHttpDataSource.Factory(okHttpClient)
         val cacheFactory = CacheDataSource.Factory()
             .setCache(downloadCache)
             .setUpstreamDataSourceFactory(httpFactory)
             .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
-        val mediaItem = MediaItem.fromUri(manifest.manifestUrl)
+        val mediaItem = MediaItem.fromUri(manifestUrl)
 
         val dashFactory = DashMediaSource.Factory(cacheFactory)
-
         if (content.drm) {
-            val offlineKeySetId = offlineLicenseStore.get(contentId)
-            val drmSessionManager = createDrmSessionManager(manifest.licenseUrl, contentId, offlineKeySetId)
+            val cachedLicense = offlineLicenseStore.get(contentId)
+            val drmSessionManager = createDrmSessionManager(licenseUrl, contentId, cachedLicense)
             dashFactory.setDrmSessionManagerProvider { drmSessionManager }
         }
         val mediaSource = dashFactory.createMediaSource(mediaItem)
@@ -57,22 +55,18 @@ class PlayerManager(
     private fun createDrmSessionManager(
         licenseUrl: String,
         contentId: String,
-        offlineKeySetId: ByteArray?,
+        cachedLicense: ByteArray?,
     ): DefaultDrmSessionManager {
         val uuid = C.CLEARKEY_UUID
-        val drmCallback = HttpMediaDrmCallback(licenseUrl, OkHttpDataSource.Factory(okHttpClient)).apply {
+        val httpCallback = HttpMediaDrmCallback(licenseUrl, OkHttpDataSource.Factory(okHttpClient)).apply {
             setKeyRequestProperty("x-content-id", contentId)
             setKeyRequestProperty("Content-Type", "application/json")
         }
+        val callback = CachedClearKeyDrmCallback(cachedLicense, httpCallback)
 
-        val manager = DefaultDrmSessionManager.Builder()
+        return DefaultDrmSessionManager.Builder()
             .setUuidAndExoMediaDrmProvider(uuid) { FrameworkMediaDrm.newInstance(uuid) }
-            .build(drmCallback)
-
-        if (offlineKeySetId != null) {
-            manager.setMode(DefaultDrmSessionManager.MODE_PLAYBACK, offlineKeySetId)
-        }
-        return manager
+            .build(callback)
     }
 
     fun release() {
