@@ -50,18 +50,22 @@ class PlayerViewModel @Inject constructor(
         viewModelScope.launch {
             _loading.value = true
             _error.value = null
+
+            // Cache-first: if content is already downloaded, play locally without touching the network.
+            val offline = buildOfflinePlayData(contentId)
+            if (offline != null) {
+                Log.d("PlayerViewModel", "Playing $contentId from local download")
+                _content.value = offline.first
+                _manifest.value = offline.second
+                _loading.value = false
+                return@launch
+            }
+
             try {
                 _content.value = catalogRepository.getContent(contentId)
                 _manifest.value = apiService.getPlayManifest(contentId)
             } catch (e: Exception) {
-                Log.w("PlayerViewModel", "Network load failed; trying offline", e)
-                val offline = buildOfflinePlayData(contentId)
-                if (offline != null) {
-                    _content.value = offline.first
-                    _manifest.value = offline.second
-                } else {
-                    _error.value = e.message ?: "Unknown error"
-                }
+                _error.value = e.message ?: "Unknown error"
             } finally {
                 _loading.value = false
             }
