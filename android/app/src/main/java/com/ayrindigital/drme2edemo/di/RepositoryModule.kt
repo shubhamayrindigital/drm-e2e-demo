@@ -5,7 +5,6 @@ import com.ayrindigital.drme2edemo.data.api.ApiService
 import com.ayrindigital.drme2edemo.data.auth.AuthRepository
 import com.ayrindigital.drme2edemo.data.auth.TokenStore
 import com.ayrindigital.drme2edemo.data.catalog.CatalogRepository
-import com.ayrindigital.drme2edemo.data.downloads.DownloadRepository
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -29,9 +28,4 @@ object RepositoryModule {
     @Provides
     @Singleton
     fun provideCatalogRepository(apiService: ApiService): CatalogRepository = CatalogRepository(apiService)
-
-    @Provides
-    @Singleton
-    fun provideDownloadRepository(context: Context, apiService: ApiService): DownloadRepository =
-        DownloadRepository(context, apiService)
 }

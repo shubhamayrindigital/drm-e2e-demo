@@ -59,8 +59,12 @@ fun CatalogScreen(
                         item = item,
                         downloadState = downloads.find { it.id == item.id },
                         onSelect = { onContentSelected(item.id) },
-                        onDownload = { downloadViewModel.startDownload(item.id, item.id, item.drm) },
+                        onDownload = {
+                            val manifestUrl = "http://10.0.2.2:3000/catalog/${item.id}/manifest.mpd"
+                            downloadViewModel.startDownload(item.id, manifestUrl)
+                        },
                         onPause = { downloadViewModel.pauseDownload(item.id) },
+                        onResume = { downloadViewModel.resumeDownload(item.id) },
                         onRemove = { downloadViewModel.removeDownload(item.id) },
                     )
                 }
@@ -76,6 +80,7 @@ fun ContentItemCard(
     onSelect: () -> Unit,
     onDownload: () -> Unit,
     onPause: () -> Unit,
+    onResume: () -> Unit,
     onRemove: () -> Unit,
 ) {
     Card(
@@ -113,26 +118,36 @@ fun ContentItemCard(
                     modifier = Modifier.weight(1f),
                 )
 
-                when {
-                    downloadState?.state == Download.STATE_COMPLETED -> {
-                        Button(onClick = onRemove, modifier = Modifier.padding(start = 8.dp)) {
-                            Text("Remove")
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    when (downloadState?.state) {
+                        Download.STATE_COMPLETED -> {
+                            Text("✓ Downloaded", fontSize = 12.sp)
+                            Button(onClick = onRemove) { Text("Remove") }
                         }
-                    }
-                    downloadState?.state == Download.STATE_DOWNLOADING -> {
-                        Button(onClick = onPause, modifier = Modifier.padding(start = 8.dp)) {
-                            Text("Pause")
+                        Download.STATE_DOWNLOADING -> {
+                            Button(onClick = onPause) { Text("Pause") }
+                            Button(onClick = onRemove) { Text("Cancel") }
                         }
-                    }
-                    item.entitled -> {
-                        Button(onClick = onDownload, modifier = Modifier.padding(start = 8.dp)) {
-                            Text("Download")
+                        Download.STATE_QUEUED, Download.STATE_RESTARTING -> {
+                            Text("Queued…", fontSize = 12.sp)
+                            Button(onClick = onRemove) { Text("Cancel") }
+                        }
+                        Download.STATE_STOPPED -> {
+                            Button(onClick = onResume) { Text("Resume") }
+                            Button(onClick = onRemove) { Text("Cancel") }
+                        }
+                        Download.STATE_FAILED -> {
+                            Text("Failed", fontSize = 12.sp)
+                            Button(onClick = onRemove) { Text("Clear") }
+                        }
+                        else -> if (item.entitled) {
+                            Button(onClick = onDownload) { Text("Download") }
                         }
                     }
                 }
             }
 
-            if (downloadState != null && downloadState.state == Download.STATE_DOWNLOADING) {
+            if (downloadState != null && downloadState.state != Download.STATE_COMPLETED) {
                 LinearProgressIndicator(
                     progress = { downloadState.progress },
                     modifier = Modifier

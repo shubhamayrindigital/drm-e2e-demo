@@ -16,26 +16,20 @@ class DownloadViewModel @Inject constructor(
 ) : ViewModel() {
     val downloads: StateFlow<List<DownloadState>> = downloadRepository.downloads
 
-    fun startDownload(contentId: String, manifestUrl: String, isDrm: Boolean = false) {
-        viewModelScope.launch {
-            try {
-                downloadRepository.startDownload(contentId, manifestUrl, isDrm)
-            } catch (e: Exception) {
-                // Handle error - could emit to error flow if needed
-            }
-        }
+    fun startDownload(contentId: String, manifestUrl: String) {
+        downloadRepository.startDownload(contentId, manifestUrl)
     }
 
     fun pauseDownload(contentId: String) {
-        viewModelScope.launch {
-            downloadRepository.pauseDownload(contentId)
-        }
+        downloadRepository.pauseDownload(contentId)
+    }
+
+    fun resumeDownload(contentId: String) {
+        downloadRepository.resumeDownload(contentId)
     }
 
     fun removeDownload(contentId: String) {
-        viewModelScope.launch {
-            downloadRepository.removeDownload(contentId)
-        }
+        downloadRepository.removeDownload(contentId)
     }
 
     fun isDownloading(contentId: String): Boolean =

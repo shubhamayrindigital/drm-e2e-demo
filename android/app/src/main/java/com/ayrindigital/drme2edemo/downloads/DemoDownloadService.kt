@@ -4,30 +4,39 @@ import android.app.Notification
 import android.content.Context
 import android.net.Uri
 import androidx.core.app.NotificationCompat
-import androidx.media3.datasource.cache.CacheDataSource
-import androidx.media3.datasource.cache.LeastRecentlyUsedCacheEvictor
-import androidx.media3.datasource.cache.SimpleCache
-import androidx.media3.datasource.okhttp.OkHttpDataSource
-import androidx.media3.exoplayer.offline.DefaultDownloadIndex
-import androidx.media3.exoplayer.offline.DefaultDownloaderFactory
 import androidx.media3.exoplayer.offline.Download
 import androidx.media3.exoplayer.offline.DownloadManager
 import androidx.media3.exoplayer.offline.DownloadRequest
 import androidx.media3.exoplayer.offline.DownloadService
 import androidx.media3.exoplayer.scheduler.Scheduler
-import androidx.media3.database.StandaloneDatabaseProvider
+import com.ayrindigital.drme2edemo.MyApplication
 import com.ayrindigital.drme2edemo.R
-import okhttp3.OkHttpClient
-import java.io.File
+import com.ayrindigital.drme2edemo.data.downloads.DownloadRepository
+import dagger.hilt.EntryPoint
+import dagger.hilt.InstallIn
+import dagger.hilt.android.EntryPointAccessors
+import dagger.hilt.components.SingletonComponent
 
 class DemoDownloadService : DownloadService(
     FOREGROUND_NOTIFICATION_ID,
     DEFAULT_FOREGROUND_NOTIFICATION_UPDATE_INTERVAL,
-    CHANNEL_ID,
+    MyApplication.DOWNLOAD_CHANNEL_ID,
     R.string.app_name,
     0,
 ) {
-    override fun getDownloadManager(): DownloadManager = downloadManager
+    @EntryPoint
+    @InstallIn(SingletonComponent::class)
+    interface DownloadEntryPoint {
+        fun downloadManager(): DownloadManager
+        fun downloadRepository(): DownloadRepository
+    }
+
+    override fun getDownloadManager(): DownloadManager {
+        val entry = EntryPointAccessors.fromApplication(applicationContext, DownloadEntryPoint::class.java)
+        // Touch repository so its init block attaches the listener.
+        entry.downloadRepository()
+        return entry.downloadManager()
+    }
 
     override fun getScheduler(): Scheduler? = null
 
@@ -43,7 +52,7 @@ class DemoDownloadService : DownloadService(
             else -> "Ready"
         }
 
-        return NotificationCompat.Builder(this, CHANNEL_ID)
+        return NotificationCompat.Builder(this, MyApplication.DOWNLOAD_CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_launcher_foreground)
             .setContentTitle(title)
             .setOngoing(activeCount > 0)
@@ -53,38 +62,26 @@ class DemoDownloadService : DownloadService(
 
     companion object {
         private const val FOREGROUND_NOTIFICATION_ID = 1
-        private const val CHANNEL_ID = "download_channel"
-
-        private var serviceInstance: DemoDownloadService? = null
-
-        private val downloadManager by lazy {
-            val context = serviceInstance ?: error("Service not initialized")
-            val databaseProvider = StandaloneDatabaseProvider(context)
-            val cacheDir = File(context.getExternalFilesDir(null), "downloads")
-            cacheDir.mkdirs()
-
-            val downloadIndex = DefaultDownloadIndex(databaseProvider)
-            val cache = SimpleCache(cacheDir, LeastRecentlyUsedCacheEvictor(100 * 1024 * 1024))
-
-            val okHttpClient = OkHttpClient.Builder()
-                .connectTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
-                .readTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
-                .build()
-
-            val httpDataSourceFactory = OkHttpDataSource.Factory(okHttpClient)
-            val cacheDataSourceFactory = CacheDataSource.Factory()
-                .setCache(cache)
-                .setUpstreamDataSourceFactory(httpDataSourceFactory)
-
-            DownloadManager(context, DefaultDownloadIndex(databaseProvider), DefaultDownloaderFactory(cacheDataSourceFactory))
-        }
+        private const val STOP_REASON_USER = 1
 
         fun startDownload(context: Context, contentId: String, manifestUrl: String) {
-            val request = DownloadRequest.Builder(contentId, Uri.parse(manifestUrl)).build()
-            sendAddDownload(context, DemoDownloadService::class.java, request, false)
+            val request = DownloadRequest.Builder(contentId, Uri.parse(manifestUrl))
+                .setMimeType(androidx.media3.common.MimeTypes.APPLICATION_MPD)
+                .build()
+            sendAddDownload(context, DemoDownloadService::class.java, request, /* foreground = */ false)
         }
 
         fun pauseDownload(context: Context, id: String) {
+            sendSetStopReason(
+                context,
+                DemoDownloadService::class.java,
+                id,
+                STOP_REASON_USER,
+                /* foreground = */ false,
+            )
+        }
+
+        fun resumeDownload(context: Context, id: String) {
             sendSetStopReason(
                 context,
                 DemoDownloadService::class.java,
@@ -97,9 +94,5 @@ class DemoDownloadService : DownloadService(
         fun removeDownload(context: Context, id: String) {
             sendRemoveDownload(context, DemoDownloadService::class.java, id, /* foreground = */ false)
         }
-    }
-
-    init {
-        serviceInstance = this
     }
 }

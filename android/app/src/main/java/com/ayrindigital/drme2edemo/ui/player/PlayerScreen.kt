@@ -49,7 +49,13 @@ fun PlayerScreen(
 
     LaunchedEffect(content) {
         if (content != null && player == null) {
-            val playerManager = PlayerManager(context, viewModel.apiService, viewModel.okHttpClient)
+            val playerManager = PlayerManager(
+                context = context,
+                apiService = viewModel.apiService,
+                okHttpClient = viewModel.okHttpClient,
+                downloadCache = viewModel.downloadCache,
+                offlineLicenseStore = viewModel.offlineLicenseStore,
+            )
             viewModel.createPlayer(playerManager, contentId)
         }
     }

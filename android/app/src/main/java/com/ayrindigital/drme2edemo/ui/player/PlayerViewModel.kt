@@ -2,11 +2,13 @@ package com.ayrindigital.drme2edemo.ui.player
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.media3.datasource.cache.SimpleCache
 import androidx.media3.exoplayer.ExoPlayer
 import com.ayrindigital.drme2edemo.data.api.ApiService
 import com.ayrindigital.drme2edemo.data.api.ContentDetail
 import com.ayrindigital.drme2edemo.data.api.PlayManifestResponse
 import com.ayrindigital.drme2edemo.data.catalog.CatalogRepository
+import com.ayrindigital.drme2edemo.data.downloads.OfflineLicenseStore
 import com.ayrindigital.drme2edemo.player.PlayerManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -20,6 +22,8 @@ class PlayerViewModel @Inject constructor(
     private val catalogRepository: CatalogRepository,
     val apiService: ApiService,
     val okHttpClient: OkHttpClient,
+    val downloadCache: SimpleCache,
+    val offlineLicenseStore: OfflineLicenseStore,
 ) : ViewModel() {
     private val _content = MutableStateFlow<ContentDetail?>(null)
     val content: StateFlow<ContentDetail?> = _content
