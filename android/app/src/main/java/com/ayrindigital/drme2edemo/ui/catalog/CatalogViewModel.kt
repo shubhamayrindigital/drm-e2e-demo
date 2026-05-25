@@ -4,22 +4,23 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.media3.exoplayer.offline.Download
-import androidx.media3.exoplayer.offline.DownloadManager
 import com.ayrindigital.drme2edemo.data.api.ContentItem
 import com.ayrindigital.drme2edemo.data.catalog.CatalogRepository
+import com.ayrindigital.drme2edemo.data.downloads.DownloadRepository
 import com.ayrindigital.drme2edemo.data.network.NetworkMonitor
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @HiltViewModel
 class CatalogViewModel @Inject constructor(
     private val catalogRepository: CatalogRepository,
-    private val downloadManager: DownloadManager,
-    networkMonitor: NetworkMonitor,
+    private val downloadRepository: DownloadRepository,
+    private val networkMonitor: NetworkMonitor,
 ) : ViewModel() {
     private val tag = "CatalogViewModel"
 
@@ -36,32 +37,23 @@ class CatalogViewModel @Inject constructor(
     val offline: StateFlow<Boolean> = _offline
 
     init {
-        loadContent()
         viewModelScope.launch {
-            // drop(1) skips the initial value emitted on subscription (already covered by loadContent above).
-            networkMonitor.isOnline.drop(1).collect { loadContent() }
+            combine(
+                networkMonitor.isOnline,
+                downloadRepository.downloads,
+            ) { online, downloads ->
+                online to downloads.filter { it.state == Download.STATE_COMPLETED }.map { it.id }.toSet()
+            }
+                .distinctUntilChanged()
+                .collect { (online, downloadedIds) ->
+                    refresh(online, downloadedIds)
+                }
         }
     }
 
     fun loadContent() {
         viewModelScope.launch {
-            _loading.value = true
-            _error.value = null
-            try {
-                _contentList.value = catalogRepository.listContent()
-                _offline.value = false
-            } catch (e: Exception) {
-                Log.w(tag, "Network catalog fetch failed, falling back to local", e)
-                val downloadedIds = downloadedContentIds()
-                val cached = catalogRepository.listCachedContent()
-                _contentList.value = cached.filter { it.id in downloadedIds }
-                _offline.value = true
-                if (downloadedIds.isEmpty()) {
-                    _error.value = null // show empty list, not error
-                }
-            } finally {
-                _loading.value = false
-            }
+            refresh(networkMonitor.isOnline.value, downloadedIdsFromRepo())
         }
     }
 
@@ -69,21 +61,39 @@ class CatalogViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 catalogRepository.grantEntitlement(contentId)
-                loadContent()
+                refresh(networkMonitor.isOnline.value, downloadedIdsFromRepo())
             } catch (e: Exception) {
                 _error.value = e.message
             }
         }
     }
 
-    private fun downloadedContentIds(): Set<String> {
-        val ids = mutableSetOf<String>()
-        downloadManager.downloadIndex.getDownloads().use { cursor ->
-            while (cursor.moveToNext()) {
-                val d = cursor.download
-                if (d.state == Download.STATE_COMPLETED) ids += d.request.id
+    private suspend fun refresh(online: Boolean, downloadedIds: Set<String>) {
+        _loading.value = true
+        _error.value = null
+        if (online) {
+            try {
+                _contentList.value = catalogRepository.listContent()
+                _offline.value = false
+            } catch (e: Exception) {
+                Log.w(tag, "Catalog fetch failed despite being online; falling back", e)
+                showOffline(downloadedIds)
             }
+        } else {
+            showOffline(downloadedIds)
         }
-        return ids
+        _loading.value = false
     }
+
+    private suspend fun showOffline(downloadedIds: Set<String>) {
+        val cached = catalogRepository.listCachedContent()
+        _contentList.value = cached.filter { it.id in downloadedIds }
+        _offline.value = true
+    }
+
+    private fun downloadedIdsFromRepo(): Set<String> =
+        downloadRepository.downloads.value
+            .filter { it.state == Download.STATE_COMPLETED }
+            .map { it.id }
+            .toSet()
 }
