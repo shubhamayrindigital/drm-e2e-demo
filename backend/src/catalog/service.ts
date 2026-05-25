@@ -1,5 +1,4 @@
 import { prisma } from '../db/client.js';
-import { r2Service } from '../storage/r2Service.js';
 
 export class CatalogService {
   async listContent(userId: string) {
@@ -49,12 +48,7 @@ export class CatalogService {
       throw new Error('Not entitled to this content');
     }
 
-    const manifestUrl = await r2Service.getSignedManifestUrl(content.manifestPath);
-
-    const result: any = {
-      manifestUrl,
-      licenseUrl: process.env.LICENSE_URL || 'http://10.0.2.2:3000/license/clearkey',
-    };
+    const result: any = {};
 
     if (content.drm) {
       result.drmConfig = {

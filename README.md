@@ -421,9 +421,9 @@ curl http://localhost:3000/health # → {"ok":true}
 ```bash
 cd android
 # gradle.properties already has BACKEND_BASE_URL=https://drm-e2e-backend.onrender.com/
-# For local backend testing, override at build time:
-./gradlew :app:assembleDebug -PBACKEND_BASE_URL=http://10.0.2.2:3000/
-# Or just install:
+# To point at a local backend, run `adb reverse tcp:3000 tcp:3000` then build with:
+./gradlew :app:assembleDebug -PBACKEND_BASE_URL=http://localhost:3000/
+# Or just install pointing at the deployed backend:
 ./gradlew :app:installDebug
 ```
 

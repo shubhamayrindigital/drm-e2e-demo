@@ -25,7 +25,7 @@ android {
 
         val backendBaseUrl: String = (project.findProperty("BACKEND_BASE_URL") as String?)
             ?: System.getenv("BACKEND_BASE_URL")
-            ?: "http://10.0.2.2:3000/"
+            ?: "https://drm-e2e-backend.onrender.com/"
         buildConfigField("String", "BACKEND_BASE_URL", "\"$backendBaseUrl\"")
     }
 
@@ -41,11 +41,10 @@ android {
     buildTypes {
         debug {
             signingConfig = signingConfigs.getByName("release")
-            buildConfigField(
-                "String",
-                "BACKEND_BASE_URL",
-                "\"${(project.findProperty("BACKEND_BASE_URL_DEBUG") as String?) ?: "http://10.0.2.2:3000/"}\""
-            )
+            val debugBase = (project.findProperty("BACKEND_BASE_URL_DEBUG") as String?)
+                ?: (project.findProperty("BACKEND_BASE_URL") as String?)
+                ?: "https://drm-e2e-backend.onrender.com/"
+            buildConfigField("String", "BACKEND_BASE_URL", "\"$debugBase\"")
         }
         release {
             isMinifyEnabled = false

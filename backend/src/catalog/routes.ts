@@ -96,14 +96,25 @@ router.get('/:id/play', authMiddleware, async (req: Request, res: Response) => {
       { expiresIn: '5m' },
     );
 
-    const manifestUrl = `http://10.0.2.2:3000/catalog/${req.params.id}/manifest.mpd`;
+    const base = publicBaseUrl(req);
+    const manifestUrl = `${base}/catalog/${req.params.id}/manifest.mpd`;
+    const licenseUrl = `${base}/license/clearkey`;
 
-    res.json({ ...manifest, manifestUrl, playbackToken });
+    res.json({ ...manifest, manifestUrl, licenseUrl, playbackToken });
   } catch (error) {
     logger.error(error);
     res.status(403).json({ error: 'Not entitled to this content' });
   }
 });
+
+function publicBaseUrl(req: Request): string {
+  if (process.env.PUBLIC_BASE_URL) {
+    return process.env.PUBLIC_BASE_URL.replace(/\/$/, '');
+  }
+  const proto = (req.headers['x-forwarded-proto'] as string)?.split(',')[0] || req.protocol;
+  const host = (req.headers['x-forwarded-host'] as string) || req.get('host') || 'localhost';
+  return `${proto}://${host}`;
+}
 
 // [DEV ONLY] Update manifest in R2
 router.post('/dev/update-manifest', async (req: Request, res: Response) => {
