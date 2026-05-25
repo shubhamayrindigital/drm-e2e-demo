@@ -1,9 +1,12 @@
 package com.ayrindigital.drme2edemo.ui.player
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.media3.datasource.cache.SimpleCache
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.offline.Download
+import androidx.media3.exoplayer.offline.DownloadManager
 import com.ayrindigital.drme2edemo.data.api.ApiService
 import com.ayrindigital.drme2edemo.data.api.ContentDetail
 import com.ayrindigital.drme2edemo.data.api.PlayManifestResponse
@@ -24,6 +27,7 @@ class PlayerViewModel @Inject constructor(
     val okHttpClient: OkHttpClient,
     val downloadCache: SimpleCache,
     val offlineLicenseStore: OfflineLicenseStore,
+    private val downloadManager: DownloadManager,
 ) : ViewModel() {
     private val _content = MutableStateFlow<ContentDetail?>(null)
     val content: StateFlow<ContentDetail?> = _content
@@ -47,19 +51,45 @@ class PlayerViewModel @Inject constructor(
             _loading.value = true
             _error.value = null
             try {
-                val detail = catalogRepository.getContent(contentId)
-                _content.value = detail
-
-                val manifestData = apiService.getPlayManifest(contentId)
-                _manifest.value = manifestData
-
-                // Note: ExoPlayer creation needs Android context from UI layer
+                _content.value = catalogRepository.getContent(contentId)
+                _manifest.value = apiService.getPlayManifest(contentId)
             } catch (e: Exception) {
-                _error.value = e.message ?: "Unknown error"
+                Log.w("PlayerViewModel", "Network load failed; trying offline", e)
+                val offline = buildOfflinePlayData(contentId)
+                if (offline != null) {
+                    _content.value = offline.first
+                    _manifest.value = offline.second
+                } else {
+                    _error.value = e.message ?: "Unknown error"
+                }
             } finally {
                 _loading.value = false
             }
         }
+    }
+
+    private suspend fun buildOfflinePlayData(contentId: String): Pair<ContentDetail, PlayManifestResponse>? {
+        val download = downloadManager.downloadIndex.getDownload(contentId) ?: return null
+        if (download.state != Download.STATE_COMPLETED) return null
+
+        val keySetId = offlineLicenseStore.get(contentId)
+        val isDrm = keySetId != null
+        val manifestUrl = download.request.uri.toString()
+
+        val detail = ContentDetail(
+            id = contentId,
+            title = contentId,
+            description = "Offline playback",
+            drm = isDrm,
+            manifestPath = "",
+        )
+        val manifest = PlayManifestResponse(
+            manifestUrl = manifestUrl,
+            licenseUrl = "",
+            playbackToken = "",
+            drmConfig = null,
+        )
+        return detail to manifest
     }
 
     fun createPlayer(playerManager: PlayerManager, contentId: String) {
