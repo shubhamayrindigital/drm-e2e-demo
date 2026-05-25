@@ -82,6 +82,42 @@ export class LicenseService {
     }
   }
 
+  /**
+   * Issue a ClearKey license (W3C EME spec) for entitled content.
+   * Challenge: {"kids":["<base64url-kid>"],"type":"temporary"}
+   * Response:  {"keys":[{"kty":"oct","kid":"...","k":"..."}],"type":"temporary"}
+   */
+  async issueClearKeyLicense(
+    userId: string,
+    contentId: string,
+    challenge: { kids?: string[]; type?: string },
+  ): Promise<{ keys: { kty: string; kid: string; k: string }[]; type: string }> {
+    const entitlement = await prisma.entitlement.findUnique({
+      where: { userId_contentId: { userId, contentId } },
+    });
+    if (!entitlement) {
+      throw new Error('User not entitled to this content');
+    }
+
+    const content = await prisma.content.findUnique({ where: { id: contentId } });
+    if (!content || !content.kid || !content.cek) {
+      throw new Error('Content not found or missing keys');
+    }
+
+    const kidBase64Url = Buffer.from(content.kid, 'hex').toString('base64url');
+    const keyBase64Url = Buffer.from(content.cek, 'hex').toString('base64url');
+
+    logger.info(
+      { userId, contentId, requestedKids: challenge.kids, expectedKid: kidBase64Url },
+      'Issuing ClearKey license',
+    );
+
+    return {
+      keys: [{ kty: 'oct', kid: kidBase64Url, k: keyBase64Url }],
+      type: challenge.type || 'temporary',
+    };
+  }
+
   async renewOfflineLicense(userId: string, contentId: string): Promise<Buffer> {
     const offlineLicense = await prisma.offlineLicense.findUnique({
       where: { userId_contentId: { userId, contentId } },

@@ -10,15 +10,19 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 
 @Composable
 fun LoginScreen(
@@ -28,6 +32,14 @@ fun LoginScreen(
 ) {
     var email by remember { mutableStateOf("demo@example.com") }
     var password by remember { mutableStateOf("password123") }
+    val userEmail by viewModel.userEmail.collectAsState()
+    val error by viewModel.error.collectAsState()
+
+    LaunchedEffect(userEmail) {
+        if (userEmail != null) {
+            onLoginSuccess()
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -59,11 +71,19 @@ fun LoginScreen(
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
         )
 
+        if (error != null) {
+            Text(
+                "Error: $error",
+                color = Color.Red,
+                fontSize = 12.sp,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 16.dp),
+            )
+        }
+
         Button(
-            onClick = {
-                viewModel.login(email, password)
-                onLoginSuccess()
-            },
+            onClick = { viewModel.login(email, password) },
             modifier = Modifier.fillMaxWidth(),
         ) {
             Text("Login")

@@ -1,4 +1,5 @@
 import { prisma } from '../db/client.js';
+import { r2Service } from '../storage/r2Service.js';
 
 export class CatalogService {
   async listContent(userId: string) {
@@ -48,13 +49,11 @@ export class CatalogService {
       throw new Error('Not entitled to this content');
     }
 
-    // For now, manifest URLs are local or static. In prod, would use R2 signed URLs.
-    const baseUrl = process.env.MANIFEST_BASE_URL || 'http://localhost:3000/manifests';
-    const manifestUrl = `${baseUrl}/${content.manifestPath}`;
+    const manifestUrl = await r2Service.getSignedManifestUrl(content.manifestPath);
 
     const result: any = {
       manifestUrl,
-      licenseUrl: 'http://localhost:3000/license/widevine',
+      licenseUrl: process.env.LICENSE_URL || 'http://10.0.2.2:3000/license/clearkey',
     };
 
     if (content.drm) {

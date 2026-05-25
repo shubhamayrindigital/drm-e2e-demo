@@ -49,9 +49,13 @@ fun PlayerScreen(
 
     LaunchedEffect(content) {
         if (content != null && player == null) {
-            val playerManager = PlayerManager(context, viewModel.apiService)
+            val playerManager = PlayerManager(context, viewModel.apiService, viewModel.okHttpClient)
             viewModel.createPlayer(playerManager, contentId)
         }
+    }
+
+    LaunchedEffect(player) {
+        player?.playWhenReady = true
     }
 
     Box(

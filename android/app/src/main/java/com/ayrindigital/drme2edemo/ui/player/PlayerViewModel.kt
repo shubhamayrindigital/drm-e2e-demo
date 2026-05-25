@@ -12,12 +12,14 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import okhttp3.OkHttpClient
 import javax.inject.Inject
 
 @HiltViewModel
 class PlayerViewModel @Inject constructor(
     private val catalogRepository: CatalogRepository,
     val apiService: ApiService,
+    val okHttpClient: OkHttpClient,
 ) : ViewModel() {
     private val _content = MutableStateFlow<ContentDetail?>(null)
     val content: StateFlow<ContentDetail?> = _content

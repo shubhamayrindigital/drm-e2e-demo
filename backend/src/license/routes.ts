@@ -41,4 +41,29 @@ router.post('/playready', authMiddleware, async (req: Request, res: Response) =>
   res.status(501).json({ error: 'PlayReady licensing not yet implemented' });
 });
 
+// ClearKey license endpoint (W3C EME spec)
+// Receives JSON {"kids":["<base64url-kid>"],"type":"temporary"} and returns
+// {"keys":[{"kty":"oct","kid":"<base64url-kid>","k":"<base64url-key>"}],"type":"temporary"}
+router.post('/clearkey', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const contentId = req.headers['x-content-id'] as string;
+    if (!contentId) {
+      return res.status(400).json({ error: 'Missing x-content-id header' });
+    }
+    const license = await licenseService.issueClearKeyLicense(
+      req.user!.userId,
+      contentId,
+      req.body,
+    );
+    res.json(license);
+  } catch (error) {
+    logger.error(error);
+    if (error instanceof Error && error.message.includes('not entitled')) {
+      res.status(403).json({ error: error.message });
+    } else {
+      res.status(500).json({ error: 'License request failed' });
+    }
+  }
+});
+
 export default router;

@@ -6,7 +6,7 @@ import com.ayrindigital.drme2edemo.data.api.ContentItem
 
 class CatalogRepository(private val apiService: ApiService) {
     suspend fun listContent(): List<ContentItem> {
-        return apiService.listContent()
+        return apiService.listContent().items
     }
 
     suspend fun getContent(id: String): ContentDetail {

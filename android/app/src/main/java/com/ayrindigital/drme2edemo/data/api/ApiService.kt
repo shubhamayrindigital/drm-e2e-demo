@@ -15,7 +15,7 @@ interface ApiService {
 
     // Catalog
     @GET("catalog")
-    suspend fun listContent(): List<ContentItem>
+    suspend fun listContent(): ContentListResponse
 
     @GET("catalog/{id}")
     suspend fun getContent(@Path("id") id: String): ContentDetail

@@ -30,6 +30,11 @@ data class ContentItem(
 )
 
 @Serializable
+data class ContentListResponse(
+    val items: List<ContentItem>,
+)
+
+@Serializable
 data class ContentDetail(
     val id: String,
     val title: String,

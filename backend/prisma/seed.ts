@@ -17,33 +17,45 @@ async function main() {
   });
   console.log('✓ Test user:', user.email);
 
-  // Create DRM content (Big Buck Bunny encrypted)
+  // Delete old hardcoded content
+  await prisma.content.deleteMany({
+    where: { id: { in: ['drm-bbb', 'clear-bbb'] } },
+  });
+
+  const drmPssh = 'AAAASnBzc2gAAAAA7e+LqXnWSs6jyCfc1R0h7QAAACoSEKu6Jx6Lz1UrvS6GpDSppdkSEKu6Jx6Lz1UrvS6GpDSppdlI49yVmwY=';
+
+  // Create DRM content (Shaka-packaged DASH stream from R2)
   const drmContent = await prisma.content.upsert({
-    where: { id: 'drm-bbb' },
-    update: {},
+    where: { id: 'drm-test' },
+    update: {
+      manifestPath: 'drm/manifest.mpd',
+      pssh: drmPssh,
+    },
     create: {
-      id: 'drm-bbb',
-      title: 'Big Buck Bunny (DRM)',
+      id: 'drm-test',
+      title: 'Test Content (DRM)',
       description: 'Widevine-encrypted DASH stream',
       drm: true,
-      manifestPath: 'vod/drm-bbb/manifest.mpd',
+      manifestPath: 'drm/manifest.mpd',
       kid: 'abba271e8bcf552bbd2e86a434a9a5d9',
       cek: '69eaa802a6763af979e0d6ed5e2c4ed7',
-      pssh: 'CAESEAbba271e8bcf552bbd2e86a434a9a5d9GjAIDBIGV2lkZXZpbmUaKEFFU0ExMjhhZWU5YWY5Njk2ODkzNGE1YzQ0MzI4ZGQ2',
+      pssh: drmPssh,
     },
   });
   console.log('✓ DRM content:', drmContent.id);
 
-  // Create clear content (Big Buck Bunny non-DRM)
+  // Create clear content (Shaka-packaged DASH stream from R2)
   const clearContent = await prisma.content.upsert({
-    where: { id: 'clear-bbb' },
-    update: {},
+    where: { id: 'clear-test' },
+    update: {
+      manifestPath: 'clear/manifest.mpd',
+    },
     create: {
-      id: 'clear-bbb',
-      title: 'Big Buck Bunny (Clear)',
-      description: 'Non-DRM DASH + HLS stream',
+      id: 'clear-test',
+      title: 'Test Content (Clear)',
+      description: 'Non-DRM DASH stream',
       drm: false,
-      manifestPath: 'vod/clear-bbb/manifest.mpd',
+      manifestPath: 'clear/manifest.mpd',
     },
   });
   console.log('✓ Clear content:', clearContent.id);

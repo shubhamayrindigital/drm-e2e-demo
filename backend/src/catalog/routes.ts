@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
 import { authMiddleware } from '../auth/middleware.js';
 import { catalogService } from './service.js';
+import { r2Service } from '../storage/r2Service.js';
 import { logger } from '../utils/logger.js';
 import { config } from '../utils/config.js';
 
@@ -11,7 +12,7 @@ const router = Router();
 router.get('/', authMiddleware, async (req: Request, res: Response) => {
   try {
     const items = await catalogService.listContent(req.user!.userId);
-    res.json(items);
+    res.json({ items });
   } catch (error) {
     logger.error(error);
     res.status(500).json({ error: 'Failed to list content' });
@@ -44,6 +45,47 @@ router.post('/:id/entitle', authMiddleware, async (req: Request, res: Response) 
   }
 });
 
+// Derive R2 prefix from content's manifestPath (e.g. "drm/manifest.mpd" -> "drm")
+async function getContentPrefix(id: string): Promise<string | null> {
+  const content = await catalogService.getContent(id);
+  if (!content) return null;
+  return content.manifestPath.replace(/\/manifest\.mpd$/, '');
+}
+
+async function streamR2Object(res: Response, key: string, contentType: string) {
+  const obj = await r2Service.getObject(key);
+  res.type(contentType);
+  if (obj.ContentLength) res.setHeader('Content-Length', String(obj.ContentLength));
+  const body = obj.Body as NodeJS.ReadableStream;
+  body.pipe(res);
+}
+
+// Serve manifest from R2 (relative URLs in manifest resolve to segment routes below)
+router.get('/:id/manifest.mpd', async (req: Request, res: Response) => {
+  try {
+    const prefix = await getContentPrefix(req.params.id);
+    if (!prefix) return res.status(404).json({ error: 'Not found' });
+    await streamR2Object(res, `${prefix}/manifest.mpd`, 'application/dash+xml');
+  } catch (error) {
+    logger.error(error);
+    res.status(500).json({ error: 'Failed to get manifest' });
+  }
+});
+
+// Proxy DASH segments and init segments from R2
+router.get('/:id/:kind(video|audio)/:file', async (req: Request, res: Response) => {
+  try {
+    const { id, kind, file } = req.params;
+    const prefix = await getContentPrefix(id);
+    if (!prefix) return res.status(404).json({ error: 'Not found' });
+    const contentType = file.endsWith('.mp4') ? 'video/mp4' : 'video/iso.segment';
+    await streamR2Object(res, `${prefix}/${kind}/${file}`, contentType);
+  } catch (error) {
+    logger.error(error);
+    res.status(500).json({ error: 'Failed to get segment' });
+  }
+});
+
 // Get manifest + playback token for entitled content
 router.get('/:id/play', authMiddleware, async (req: Request, res: Response) => {
   try {
@@ -53,10 +95,28 @@ router.get('/:id/play', authMiddleware, async (req: Request, res: Response) => {
       config.JWT_SECRET,
       { expiresIn: '5m' },
     );
-    res.json({ ...manifest, playbackToken });
+
+    const manifestUrl = `http://10.0.2.2:3000/catalog/${req.params.id}/manifest.mpd`;
+
+    res.json({ ...manifest, manifestUrl, playbackToken });
   } catch (error) {
     logger.error(error);
     res.status(403).json({ error: 'Not entitled to this content' });
+  }
+});
+
+// [DEV ONLY] Update manifest in R2
+router.post('/dev/update-manifest', async (req: Request, res: Response) => {
+  try {
+    const { manifestPath, content } = req.body;
+    if (!manifestPath || !content) {
+      return res.status(400).json({ error: 'manifestPath and content required' });
+    }
+    await r2Service.uploadManifest(manifestPath, content);
+    res.json({ ok: true, message: `Updated ${manifestPath}` });
+  } catch (error) {
+    logger.error(error);
+    res.status(500).json({ error: 'Failed to update manifest' });
   }
 });
 
