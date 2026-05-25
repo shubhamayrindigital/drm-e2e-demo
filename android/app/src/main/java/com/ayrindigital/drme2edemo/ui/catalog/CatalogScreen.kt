@@ -36,6 +36,7 @@ fun CatalogScreen(
     val content by viewModel.contentList.collectAsState()
     val loading by viewModel.loading.collectAsState()
     val error by viewModel.error.collectAsState()
+    val offline by viewModel.offline.collectAsState()
     val downloads by downloadViewModel.downloads.collectAsState()
 
     Column(
@@ -43,12 +44,17 @@ fun CatalogScreen(
             .fillMaxSize()
             .padding(16.dp),
     ) {
-        Text("Available Content", modifier = Modifier.padding(bottom = 16.dp))
+        Text(
+            if (offline) "Available Content (Offline)" else "Available Content",
+            modifier = Modifier.padding(bottom = 16.dp),
+        )
 
         if (loading) {
             CircularProgressIndicator(modifier = Modifier.align(Alignment.CenterHorizontally))
         } else if (error != null) {
             Text("Error: $error")
+        } else if (offline && content.isEmpty()) {
+            Text("You're offline. Download videos while online to watch them here.")
         } else {
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),

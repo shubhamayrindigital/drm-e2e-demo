@@ -3,15 +3,23 @@ package com.ayrindigital.drme2edemo.data.catalog
 import com.ayrindigital.drme2edemo.data.api.ApiService
 import com.ayrindigital.drme2edemo.data.api.ContentDetail
 import com.ayrindigital.drme2edemo.data.api.ContentItem
+import javax.inject.Inject
+import javax.inject.Singleton
 
-class CatalogRepository(private val apiService: ApiService) {
+@Singleton
+class CatalogRepository @Inject constructor(
+    private val apiService: ApiService,
+    private val catalogCache: CatalogCache,
+) {
     suspend fun listContent(): List<ContentItem> {
-        return apiService.listContent().items
+        val items = apiService.listContent().items
+        catalogCache.save(items)
+        return items
     }
 
-    suspend fun getContent(id: String): ContentDetail {
-        return apiService.getContent(id)
-    }
+    suspend fun listCachedContent(): List<ContentItem> = catalogCache.read()
+
+    suspend fun getContent(id: String): ContentDetail = apiService.getContent(id)
 
     suspend fun grantEntitlement(contentId: String) {
         apiService.grantEntitlement(contentId)

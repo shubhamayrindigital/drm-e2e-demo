@@ -4,7 +4,6 @@ import android.content.Context
 import com.ayrindigital.drme2edemo.data.api.ApiService
 import com.ayrindigital.drme2edemo.data.auth.AuthRepository
 import com.ayrindigital.drme2edemo.data.auth.TokenStore
-import com.ayrindigital.drme2edemo.data.catalog.CatalogRepository
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -24,8 +23,4 @@ object RepositoryModule {
         apiService: ApiService,
         tokenStore: TokenStore,
     ): AuthRepository = AuthRepository(apiService, tokenStore)
-
-    @Provides
-    @Singleton
-    fun provideCatalogRepository(apiService: ApiService): CatalogRepository = CatalogRepository(apiService)
 }

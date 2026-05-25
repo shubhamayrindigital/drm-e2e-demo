@@ -62,8 +62,10 @@ class PlayerViewModel @Inject constructor(
             }
 
             try {
-                _content.value = catalogRepository.getContent(contentId)
-                _manifest.value = apiService.getPlayManifest(contentId)
+                val detail = catalogRepository.getContent(contentId)
+                val manifest = apiService.getPlayManifest(contentId)
+                _manifest.value = manifest
+                _content.value = detail
             } catch (e: Exception) {
                 _error.value = e.message ?: "Unknown error"
             } finally {
