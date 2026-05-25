@@ -1,0 +1,31 @@
+services:
+  - type: web
+    name: drm-e2e-backend
+    runtime: node
+    region: singapore
+    plan: free
+    rootDir: backend
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: DIRECT_URL
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: CF_BUCKET_NAME
+        sync: false
+      - key: CF_R2_ENDPOINT
+        sync: false
+      - key: CF_R2_ACCESS_KEY_ID
+        sync: false
+      - key: CF_R2_SECRET_ACCESS_KEY
+        sync: false
+      - key: WIDEVINE_LICENSE_SERVER_URL
+        value: https://proxy.uat.widevine.com/proxy
+      - key: OFFLINE_LICENSE_TTL_SECONDS
+        value: "604800"

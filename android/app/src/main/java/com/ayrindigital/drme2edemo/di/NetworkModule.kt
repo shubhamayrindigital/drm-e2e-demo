@@ -1,6 +1,7 @@
 package com.ayrindigital.drme2edemo.di
 
 import android.content.Context
+import com.ayrindigital.drme2edemo.BuildConfig
 import com.ayrindigital.drme2edemo.data.api.ApiService
 import com.ayrindigital.drme2edemo.data.api.AuthInterceptor
 import com.ayrindigital.drme2edemo.data.auth.TokenStore
@@ -61,7 +62,7 @@ object NetworkModule {
         val contentType = "application/json".toMediaType()
 
         return Retrofit.Builder()
-            .baseUrl("http://10.0.2.2:3000/")
+            .baseUrl(BuildConfig.BACKEND_BASE_URL)
             .client(okHttpClient)
             .addConverterFactory(json.asConverterFactory(contentType))
             .build()

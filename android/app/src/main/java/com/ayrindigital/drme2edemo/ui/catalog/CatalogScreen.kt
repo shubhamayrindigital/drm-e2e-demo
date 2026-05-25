@@ -24,6 +24,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.media3.exoplayer.offline.Download
+import com.ayrindigital.drme2edemo.BuildConfig
 import com.ayrindigital.drme2edemo.data.api.ContentItem
 import com.ayrindigital.drme2edemo.ui.downloads.DownloadViewModel
 
@@ -66,7 +67,7 @@ fun CatalogScreen(
                         downloadState = downloads.find { it.id == item.id },
                         onSelect = { onContentSelected(item.id) },
                         onDownload = {
-                            val manifestUrl = "http://10.0.2.2:3000/catalog/${item.id}/manifest.mpd"
+                            val manifestUrl = "${BuildConfig.BACKEND_BASE_URL.trimEnd('/')}/catalog/${item.id}/manifest.mpd"
                             downloadViewModel.startDownload(item.id, manifestUrl)
                         },
                         onPause = { downloadViewModel.pauseDownload(item.id) },
