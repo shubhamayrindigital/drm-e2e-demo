@@ -7,9 +7,11 @@ import androidx.media3.exoplayer.offline.Download
 import androidx.media3.exoplayer.offline.DownloadManager
 import com.ayrindigital.drme2edemo.data.api.ContentItem
 import com.ayrindigital.drme2edemo.data.catalog.CatalogRepository
+import com.ayrindigital.drme2edemo.data.network.NetworkMonitor
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -17,6 +19,7 @@ import javax.inject.Inject
 class CatalogViewModel @Inject constructor(
     private val catalogRepository: CatalogRepository,
     private val downloadManager: DownloadManager,
+    networkMonitor: NetworkMonitor,
 ) : ViewModel() {
     private val tag = "CatalogViewModel"
 
@@ -34,6 +37,10 @@ class CatalogViewModel @Inject constructor(
 
     init {
         loadContent()
+        viewModelScope.launch {
+            // drop(1) skips the initial value emitted on subscription (already covered by loadContent above).
+            networkMonitor.isOnline.drop(1).collect { loadContent() }
+        }
     }
 
     fun loadContent() {
