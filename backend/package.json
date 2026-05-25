@@ -15,12 +15,16 @@
     "db:reset": "prisma migrate reset --force"
   },
   "engines": {
-    "node": ">=20"
+    "node": "20.x"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.667.0",
     "@aws-sdk/s3-request-presigner": "^3.667.0",
     "@prisma/client": "^5.21.1",
+    "@types/bcrypt": "^5.0.2",
+    "@types/express": "^4.17.23",
+    "@types/jsonwebtoken": "^9.0.8",
+    "@types/node": "^22.10.2",
     "bcrypt": "^5.1.1",
     "dotenv": "^16.4.5",
     "express": "^4.21.1",
@@ -29,14 +33,10 @@
     "pino": "^9.6.0",
     "pino-pretty": "^11.2.2",
     "prisma": "^5.21.1",
+    "typescript": "^5.7.2",
     "zod": "^3.23.8"
   },
   "devDependencies": {
-    "@types/bcrypt": "^5.0.2",
-    "@types/express": "^4.17.23",
-    "@types/jsonwebtoken": "^9.0.8",
-    "@types/node": "^22.10.2",
-    "tsx": "^4.19.2",
-    "typescript": "^5.7.2"
+    "tsx": "^4.19.2"
   }
 }
