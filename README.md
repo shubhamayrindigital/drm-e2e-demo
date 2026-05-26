@@ -240,10 +240,14 @@ You can't call the license server when offline. So while online, you must fetch 
 **What this demo actually does (because emulator ClearKey CDM doesn't implement `restoreKeys`):**
 
 1. Download segments via `DownloadManager`.
-2. When the download completes, the app POSTs to `/license/clearkey` *once* and stores the **raw response bytes** in DataStore (`OfflineLicenseStore`).
+2. When the download completes, the app POSTs to `/license/clearkey` *once* and stores the **raw response bytes** in DataStore (`OfflineLicenseStore`), tagged with a `storedAt` timestamp.
 3. On playback: a custom `MediaDrmCallback` (`CachedClearKeyDrmCallback`) intercepts the license request and returns those cached bytes instead of hitting the network.
 
 This is functionally identical to `restoreKeys` for ClearKey — the JSON-encoded keys are deterministic, so replaying the response is safe. For real Widevine you'd use `restoreKeys`.
+
+### Client-side license TTL + auto-cleanup
+
+`OfflineLicenseStore` enforces a short POC TTL (`LICENSE_TTL_MS = 60_000L`, i.e. 60 s) on the cached license. `expiriesFlow` emits `contentId → expiryAt` whenever stored licenses change. `DownloadRepository` observes it and schedules a per-content cleanup job that, on expiry, calls `downloadManager.removeDownload(id)` and clears the license entry — so an expired offline title automatically reverts to online-only and disappears from the offline catalog. The catalog UI shows a live countdown so this is visible by hand. Bump the constant for production-realistic windows.
 
 ### Offline-aware catalog
 
@@ -252,7 +256,7 @@ The catalog screen also reacts to network state and download state:
 - **Online**: full catalog from `/catalog`. Cached locally.
 - **Offline**: cached catalog filtered down to items the user has fully downloaded. Removing a download while offline immediately drops the item from the list.
 
-This is implemented with `kotlinx.coroutines.flow.combine(NetworkMonitor.isOnline, DownloadRepository.downloads)`.
+`CatalogViewModel` runs two independent collectors: the `NetworkMonitor.isOnline` flow is the only signal that triggers a `/catalog` fetch (so flipping download state never thrashes the network), and the `DownloadRepository.downloads` flow re-filters the cached catalog while offline (so a license-expiry removal slides the title out immediately).
 
 ---
 
@@ -273,9 +277,13 @@ A complete vertical slice of the above, end-to-end:
 - Online playback with auth + entitlement
 - Full offline downloads of both DRM and clear content
 - Offline license caching for DRM
+- Client-side offline-license TTL with live per-row countdown in the catalog
+- Automatic deletion of expired offline downloads (revert to online-only)
 - Live catalog refresh on network state change
 - Offline catalog filtered to downloaded items
 - Login/signup with JWT
+- Dark-only Material 3 theme with Scaffold + TopAppBar across all screens, edge-to-edge insets, FLAG_SECURE on the player, and an in-app glossary dialog
+- Reusable `LoadingDialog` for network-bound operations
 - Same keystore signing for debug+release (POC convenience)
 
 ### Documented but not implemented
@@ -475,7 +483,7 @@ The keystore (`android/app/release.keystore`) is **committed on purpose** — th
 - **`isMinifyEnabled = false`.** R8 / ProGuard is off for build simplicity.
 - **No HLS.** Apple platforms need HLS + FairPlay; this demo is DASH-only.
 - **Render free tier cold starts.** ~30s on first request after idle. Fine for demo, not for prod.
-- **No license expiry enforcement.** `OfflineLicense.expiresAt` is stored but the client doesn't currently check or renew.
+- **Partial license-expiry enforcement.** Client enforces a POC 60 s TTL on the cached license bytes and auto-deletes the offline download on expiry. The backend's `OfflineLicense.expiresAt` row is recorded but not yet cross-checked or renewed against the client TTL.
 
 ---
 

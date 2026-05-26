@@ -365,66 +365,65 @@ private fun ActionRow(
     onRemove: () -> Unit,
 ) {
     val isDownloaded = downloadState?.state == Download.STATE_COMPLETED
-    when (downloadState?.state) {
-        Download.STATE_DOWNLOADING,
-        Download.STATE_QUEUED,
-        Download.STATE_RESTARTING -> Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            PlayPrimary(item, isDownloaded, onPlay, Modifier.weight(1f))
-            FilledTonalButton(onClick = onRemove, modifier = Modifier.weight(1f)) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(16.dp),
-                    strokeWidth = 2.dp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Spacer(Modifier.size(8.dp))
-                Text("Downloading…")
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        when (downloadState?.state) {
+            Download.STATE_DOWNLOADING,
+            Download.STATE_QUEUED,
+            Download.STATE_RESTARTING -> {
+                PlayPrimary(item, isDownloaded, onPlay)
+                FilledTonalButton(onClick = onRemove, modifier = Modifier.fillMaxWidth()) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(16.dp),
+                        strokeWidth = 2.dp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.size(8.dp))
+                    Text("Downloading…")
+                }
             }
-        }
-        Download.STATE_COMPLETED -> Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            PlayPrimary(item, isDownloaded, onPlay, Modifier.weight(1f))
-            FilledTonalButton(onClick = onRemove, modifier = Modifier.weight(1f)) {
-                Icon(Icons.Filled.Delete, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.size(6.dp))
-                Text("Remove")
-            }
-        }
-        Download.STATE_STOPPED -> Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            PlayPrimary(item, isDownloaded, onPlay, Modifier.weight(1f))
-            FilledTonalButton(onClick = onResume, modifier = Modifier.weight(1f)) {
-                Icon(Icons.Filled.PlayArrow, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.size(6.dp))
-                Text("Resume")
-            }
-            OutlinedButton(onClick = onRemove, modifier = Modifier.weight(1f)) { Text("Cancel") }
-        }
-        Download.STATE_FAILED -> Column {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    Icons.Filled.WarningAmber,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.error,
-                    modifier = Modifier.size(16.dp),
-                )
-                Spacer(Modifier.size(6.dp))
-                Text(
-                    "Download failed",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.error,
-                )
-            }
-            Spacer(Modifier.height(8.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                PlayPrimary(item, isDownloaded, onPlay, Modifier.weight(1f))
-                OutlinedButton(onClick = onRemove, modifier = Modifier.weight(1f)) { Text("Clear") }
-            }
-        }
-        else -> Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            PlayPrimary(item, isDownloaded, onPlay, Modifier.weight(1f))
-            if (item.entitled) {
-                FilledTonalButton(onClick = onDownload, modifier = Modifier.weight(1f)) {
-                    Icon(Icons.Filled.Download, contentDescription = null, modifier = Modifier.size(18.dp))
+            Download.STATE_COMPLETED -> {
+                PlayPrimary(item, isDownloaded, onPlay)
+                FilledTonalButton(onClick = onRemove, modifier = Modifier.fillMaxWidth()) {
+                    Icon(Icons.Filled.Delete, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.size(6.dp))
-                    Text("Download")
+                    Text("Remove")
+                }
+            }
+            Download.STATE_STOPPED -> {
+                PlayPrimary(item, isDownloaded, onPlay)
+                FilledTonalButton(onClick = onResume, modifier = Modifier.fillMaxWidth()) {
+                    Icon(Icons.Filled.PlayArrow, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.size(6.dp))
+                    Text("Resume")
+                }
+                OutlinedButton(onClick = onRemove, modifier = Modifier.fillMaxWidth()) { Text("Cancel") }
+            }
+            Download.STATE_FAILED -> {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        Icons.Filled.WarningAmber,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.size(16.dp),
+                    )
+                    Spacer(Modifier.size(6.dp))
+                    Text(
+                        "Download failed",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+                PlayPrimary(item, isDownloaded, onPlay)
+                OutlinedButton(onClick = onRemove, modifier = Modifier.fillMaxWidth()) { Text("Clear") }
+            }
+            else -> {
+                PlayPrimary(item, isDownloaded, onPlay)
+                if (item.entitled) {
+                    FilledTonalButton(onClick = onDownload, modifier = Modifier.fillMaxWidth()) {
+                        Icon(Icons.Filled.Download, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.size(6.dp))
+                        Text("Download")
+                    }
                 }
             }
         }
@@ -436,7 +435,7 @@ private fun PlayPrimary(
     item: ContentItem,
     isDownloaded: Boolean,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier,
+    modifier: Modifier = Modifier.fillMaxWidth(),
 ) {
     Button(
         onClick = onClick,
