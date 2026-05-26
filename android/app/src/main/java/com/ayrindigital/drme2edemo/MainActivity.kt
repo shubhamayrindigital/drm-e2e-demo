@@ -1,7 +1,9 @@
 package com.ayrindigital.drme2edemo
 
+import android.graphics.Color
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.Composable
@@ -24,7 +26,11 @@ import dagger.hilt.android.AndroidEntryPoint
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
+        // Force dark-style system bars regardless of OS theme so icons stay light over our dark UI.
+        enableEdgeToEdge(
+            statusBarStyle = SystemBarStyle.dark(Color.TRANSPARENT),
+            navigationBarStyle = SystemBarStyle.dark(Color.TRANSPARENT),
+        )
         setContent {
             DRME2EDemoTheme {
                 AppNavHost()
@@ -72,6 +78,7 @@ fun AppNavHost() {
             PlayerScreen(
                 contentId = contentId,
                 viewModel = playerViewModel,
+                onBack = { navController.popBackStack() },
             )
         }
     }

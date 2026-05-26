@@ -11,8 +11,8 @@ import com.ayrindigital.drme2edemo.data.network.NetworkMonitor
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -37,38 +37,41 @@ class CatalogViewModel @Inject constructor(
     val offline: StateFlow<Boolean> = _offline
 
     init {
+        // Online status is the only signal that should trigger a network fetch — re-fetching
+        // every time a download state changes causes pointless API calls (and a visible flicker).
         viewModelScope.launch {
-            combine(
-                networkMonitor.isOnline,
-                downloadRepository.downloads,
-            ) { online, downloads ->
-                online to downloads.filter { it.state == Download.STATE_COMPLETED }.map { it.id }.toSet()
+            networkMonitor.isOnline.collect { online ->
+                refresh(online)
             }
+        }
+        // While offline, re-filter the cached list as the downloaded set changes (e.g. a license
+        // expiry removes a title). While online, downloads don't affect the catalog payload.
+        viewModelScope.launch {
+            downloadRepository.downloads
+                .map { list -> list.filter { it.state == Download.STATE_COMPLETED }.map { it.id }.toSet() }
                 .distinctUntilChanged()
-                .collect { (online, downloadedIds) ->
-                    refresh(online, downloadedIds)
+                .collect { downloadedIds ->
+                    if (_offline.value) showOffline(downloadedIds)
                 }
         }
     }
 
     fun loadContent() {
-        viewModelScope.launch {
-            refresh(networkMonitor.isOnline.value, downloadedIdsFromRepo())
-        }
+        viewModelScope.launch { refresh(networkMonitor.isOnline.value) }
     }
 
     fun grantEntitlement(contentId: String) {
         viewModelScope.launch {
             try {
                 catalogRepository.grantEntitlement(contentId)
-                refresh(networkMonitor.isOnline.value, downloadedIdsFromRepo())
+                refresh(networkMonitor.isOnline.value)
             } catch (e: Exception) {
                 _error.value = e.message
             }
         }
     }
 
-    private suspend fun refresh(online: Boolean, downloadedIds: Set<String>) {
+    private suspend fun refresh(online: Boolean) {
         _loading.value = true
         _error.value = null
         if (online) {
@@ -77,10 +80,10 @@ class CatalogViewModel @Inject constructor(
                 _offline.value = false
             } catch (e: Exception) {
                 Log.w(tag, "Catalog fetch failed despite being online; falling back", e)
-                showOffline(downloadedIds)
+                showOffline(currentDownloadedIds())
             }
         } else {
-            showOffline(downloadedIds)
+            showOffline(currentDownloadedIds())
         }
         _loading.value = false
     }
@@ -91,7 +94,7 @@ class CatalogViewModel @Inject constructor(
         _offline.value = true
     }
 
-    private fun downloadedIdsFromRepo(): Set<String> =
+    private fun currentDownloadedIds(): Set<String> =
         downloadRepository.downloads.value
             .filter { it.state == Download.STATE_COMPLETED }
             .map { it.id }

@@ -4,6 +4,7 @@ import android.content.Context
 import com.ayrindigital.drme2edemo.BuildConfig
 import com.ayrindigital.drme2edemo.data.api.ApiService
 import com.ayrindigital.drme2edemo.data.api.AuthInterceptor
+import com.ayrindigital.drme2edemo.data.api.RetryInterceptor
 import com.ayrindigital.drme2edemo.data.auth.TokenStore
 import dagger.Module
 import dagger.Provides
@@ -43,11 +44,16 @@ object NetworkModule {
             setLevel(HttpLoggingInterceptor.Level.BODY)
         }
         return OkHttpClient.Builder()
-            .connectTimeout(30, TimeUnit.SECONDS)
-            .readTimeout(30, TimeUnit.SECONDS)
-            .writeTimeout(30, TimeUnit.SECONDS)
+            // Render free tier can take ~50s to spin up from sleep; give each attempt enough room
+            // and a longer ceiling for the whole call so a retry can fit underneath.
+            .connectTimeout(70, TimeUnit.SECONDS)
+            .readTimeout(70, TimeUnit.SECONDS)
+            .writeTimeout(70, TimeUnit.SECONDS)
+            .callTimeout(150, TimeUnit.SECONDS)
+            .retryOnConnectionFailure(true)
             .addInterceptor(loggingInterceptor)
             .addInterceptor(authInterceptor)
+            .addInterceptor(RetryInterceptor())
             .build()
     }
 

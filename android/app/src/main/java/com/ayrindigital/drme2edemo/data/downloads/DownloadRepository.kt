@@ -12,10 +12,16 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
@@ -45,8 +51,43 @@ class DownloadRepository @Inject constructor(
     private val _downloads = MutableStateFlow<List<DownloadState>>(emptyList())
     val downloads: StateFlow<List<DownloadState>> = _downloads.asStateFlow()
 
+    /** contentId -> license expiry epoch millis. Drops keys once the license is removed/expired. */
+    val licenseExpiries: StateFlow<Map<String, Long>> = offlineLicenseStore.expiriesFlow
+        .stateIn(scope, SharingStarted.Eagerly, emptyMap())
+
+    private val expiryJobs = mutableMapOf<String, Pair<Long, Job>>()
+
     init {
         attach()
+        scope.launch { observeLicenseExpiries() }
+    }
+
+    private suspend fun observeLicenseExpiries() {
+        offlineLicenseStore.expiriesFlow.collect { map ->
+            expiryJobs.keys.toList().forEach { id ->
+                if (id !in map) expiryJobs.remove(id)?.second?.cancel()
+            }
+            map.forEach { (id, expiryAt) ->
+                val existing = expiryJobs[id]
+                if (existing?.first == expiryAt) return@forEach
+                existing?.second?.cancel()
+                val job = scope.launch {
+                    val wait = expiryAt - System.currentTimeMillis()
+                    if (wait > 0) delay(wait)
+                    // Removing the license entry below makes expiriesFlow emit, which in turn
+                    // causes the outer observer to cancel this very job (id no longer in map).
+                    // Wrap the cleanup in NonCancellable so the removal actually completes.
+                    // Order matters: queue the DownloadManager removal first (non-suspending),
+                    // then clear the license store.
+                    withContext(NonCancellable) {
+                        Log.d(tag, "License expired for $id; auto-removing offline download")
+                        downloadManager.removeDownload(id)
+                        offlineLicenseStore.remove(id)
+                    }
+                }
+                expiryJobs[id] = expiryAt to job
+            }
+        }
     }
 
     private fun attach() {

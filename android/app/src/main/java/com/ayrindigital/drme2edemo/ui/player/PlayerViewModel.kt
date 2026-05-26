@@ -123,9 +123,15 @@ class PlayerViewModel @Inject constructor(
         }
     }
 
-    override fun onCleared() {
+    fun releasePlayer() {
         playerManager?.release()
+        playerManager = null
         _player.value?.release()
+        _player.value = null
+    }
+
+    override fun onCleared() {
+        releasePlayer()
         super.onCleared()
     }
 }
