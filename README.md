@@ -66,8 +66,8 @@ You will see these acronyms everywhere. Skim now, refer back later.
 
 | Term | What it means |
 |---|---|
-| **Mezzanine** | The original high-quality master file (e.g. a 4K ProRes). You package *from* the mezzanine. |
-| **Packaging** | Turning the mezzanine into a streaming-ready format (DASH or HLS), optionally encrypting it. |
+| **Input video** | The original high-quality source file (e.g. a 4K ProRes). You package *from* the input video. |
+| **Packaging** | Turning the input video into a streaming-ready format (DASH or HLS), optionally encrypting it. |
 | **DASH** | "Dynamic Adaptive Streaming over HTTP". A standard format: an XML **manifest** (`.mpd`) plus many small segments. |
 | **HLS** | Apple's equivalent of DASH. A `.m3u8` text manifest plus segments. |
 | **Manifest / MPD** | The text file the player downloads first. Describes available bitrates, segments, codecs, DRM info. |
@@ -83,7 +83,7 @@ You will see these acronyms everywhere. Skim now, refer back later.
 | **EME** | "Encrypted Media Extensions". The W3C browser API for talking to a CDM. Standard across DRMs. |
 | **MediaDrm** | Android's framework class that talks to the CDM (Widevine or ClearKey). Equivalent of EME on web. |
 | **ExoPlayer / Media3** | Google's open-source player library for Android. Knows DASH, HLS, DRM, downloads, caching. |
-| **Shaka Packager** | Google's open-source CLI for packaging mezzanine → DASH/HLS with optional encryption. |
+| **Shaka Packager** | Google's open-source CLI for packaging input video → DASH/HLS with optional encryption. |
 | **HDCP** | A handshake between device and display that prevents capturing protected video over HDMI. DRM enforces it. |
 | **Offline license** | A license that survives device reboots and works without network, usually with a server-imposed TTL. |
 | **Keyset ID** | Opaque handle the CDM gives you after a successful license fetch. You store it, and later "restore" the license without contacting the server. (Real Widevine supports this; emulator ClearKey doesn't — see [POC caveats](#15-known-limitations--poc-caveats).) |
@@ -221,7 +221,7 @@ Before any of the playback flow above can work, somebody has to turn the origina
 
 ```
 ┌──────────────┐   shaka-packager   ┌──────────────────┐    upload      ┌──────────────┐
-│  mezzanine   │ ─────────────────► │ DASH manifest    │ ─────────────► │ Cloudflare R2│
+│ input video  │ ─────────────────► │ DASH manifest    │ ─────────────► │ Cloudflare R2│
 │ (Big Buck    │                    │  + CMAF segments │                │ vod/drm-bbb/ │
 │  Bunny .mp4) │                    │  (encrypted +    │                │ vod/clear-…/ │
 └──────────────┘                    │   PSSH for DRM)  │                └──────┬───────┘
@@ -237,7 +237,7 @@ Before any of the playback flow above can work, somebody has to turn the origina
             Android player
 ```
 
-### Step 1 — Mezzanine
+### Step 1 — Input video
 
 The input is a single high-quality MP4 (Big Buck Bunny, ~350 MB). `packager/download-sample.sh` pulls it once. In production this would be the master file delivered by post-production.
 
@@ -469,7 +469,7 @@ drm-e2e-demo/
 │   │   └── seed.ts           # creates demo user + 2 content items
 │   └── package.json
 ├── packager/                 # one-time content packaging scripts
-│   ├── download-sample.sh    # fetches Big Buck Bunny mezzanine
+│   ├── download-sample.sh    # fetches Big Buck Bunny input video
 │   ├── package-clear.sh      # DASH, no encryption
 │   ├── package.sh            # DASH + CENC (ClearKey-compatible)
 │   └── keys.json             # KID/CEK for the sample (gitignored)

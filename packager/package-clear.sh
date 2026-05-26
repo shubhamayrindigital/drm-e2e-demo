@@ -2,26 +2,26 @@
 set -euo pipefail
 
 # Non-DRM packaging: DASH + HLS (clear)
-# Input: mezzanine.mp4
+# Input: input-video.mp4
 # Output: out/clear/ with DASH manifest + HLS master + CMAF fragments
 
-MEZZANINE="${1:?Usage: package-clear.sh <input.mp4>}"
+INPUT_VIDEO="${1:?Usage: package-clear.sh <input.mp4>}"
 OUTDIR="./out/clear"
 
-if [ ! -f "$MEZZANINE" ]; then
-  echo "Error: $MEZZANINE not found"
+if [ ! -f "$INPUT_VIDEO" ]; then
+  echo "Error: $INPUT_VIDEO not found"
   exit 1
 fi
 
 mkdir -p "$OUTDIR"
 
 echo "Packaging clear (non-DRM) stream..."
-echo "Input: $MEZZANINE"
+echo "Input: $INPUT_VIDEO"
 echo "Output: $OUTDIR"
 
 shaka-packager \
-  "in=${MEZZANINE},stream=video,output=${OUTDIR}/video.mp4" \
-  "in=${MEZZANINE},stream=audio,output=${OUTDIR}/audio.mp4" \
+  "in=${INPUT_VIDEO},stream=video,output=${OUTDIR}/video.mp4" \
+  "in=${INPUT_VIDEO},stream=audio,output=${OUTDIR}/audio.mp4" \
   --mpd_output "${OUTDIR}/manifest.mpd" \
   --hls_master_playlist_output "${OUTDIR}/master.m3u8" \
   --segment_duration 4
