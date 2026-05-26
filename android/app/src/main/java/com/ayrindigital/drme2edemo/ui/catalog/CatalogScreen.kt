@@ -309,32 +309,43 @@ private fun StatusChip(label: String, icon: ImageVector, tint: Color, onClick: (
 
 @Composable
 private fun LicenseCountdown(expiryAt: Long?) {
-    if (expiryAt == null) {
-        CountdownLine(
-            text = "Offline license: not cached",
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            icon = Icons.Filled.Schedule,
-        )
-        return
-    }
-    val remainingMs by produceState(initialValue = expiryAt - System.currentTimeMillis(), expiryAt) {
-        while (true) {
-            value = expiryAt - System.currentTimeMillis()
-            if (value <= 0) break
-            delay(500)
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        if (expiryAt == null) {
+            CountdownLine(
+                text = "Offline license: not cached",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                icon = Icons.Filled.Schedule,
+            )
+        } else {
+            val remainingMs by produceState(
+                initialValue = expiryAt - System.currentTimeMillis(),
+                expiryAt,
+            ) {
+                while (true) {
+                    value = expiryAt - System.currentTimeMillis()
+                    if (value <= 0) break
+                    delay(500)
+                }
+            }
+            if (remainingMs <= 0) {
+                CountdownLine(
+                    text = "Offline license expired — re-download to refresh",
+                    tint = MaterialTheme.colorScheme.error,
+                    icon = Icons.Filled.WarningAmber,
+                )
+            } else {
+                CountdownLine(
+                    text = "Offline license expires in ${formatRemaining(remainingMs)}",
+                    tint = MaterialTheme.colorScheme.tertiary,
+                    icon = Icons.Filled.Bolt,
+                )
+            }
         }
-    }
-    if (remainingMs <= 0) {
-        CountdownLine(
-            text = "Offline license expired — re-download to refresh",
-            tint = MaterialTheme.colorScheme.error,
-            icon = Icons.Filled.WarningAmber,
-        )
-    } else {
-        CountdownLine(
-            text = "Offline license expires in ${formatRemaining(remainingMs)}",
-            tint = MaterialTheme.colorScheme.tertiary,
-            icon = Icons.Filled.Bolt,
+        Text(
+            text = "POC: timer is client-enforced. Real Widevine/FairPlay enforces this inside the CDM.",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(start = 22.dp),
         )
     }
 }
@@ -490,7 +501,7 @@ private fun TerminologyDialog(onDismiss: () -> Unit) {
                 GlossaryEntry(
                     icon = Icons.Filled.Bolt,
                     term = "Offline license expiry",
-                    definition = "DRM downloads include a license that allows offline decryption for a limited time. Once it expires, re-download (online) to refresh it.",
+                    definition = "Conceptually: a DRM license lets the device decrypt offline for a limited window, after which the CDM stops releasing keys. In this POC the window is enforced by the app (60 s timer + auto-remove), not by the ClearKey CDM — real Widevine/FairPlay enforce expiry inside the CDM so it can't be bypassed by a modified client.",
                 )
             }
         },

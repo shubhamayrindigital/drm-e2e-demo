@@ -180,14 +180,15 @@ Add encryption to the above. Now every segment is AES-encrypted with a CEK. The 
 2. **Catalog.** App fetches the list of titles. Each item has `drm: true/false`, `entitled: true/false`.
 3. **Manifest fetch.** App tells ExoPlayer to play a content ID. Player requests the manifest URL. The manifest contains the bitrate ladder + a **PSSH** block declaring "this is encrypted with ClearKey, here's the KID".
 4. **Segment fetch.** Player starts downloading segments. They're AES-encrypted; without keys they're garbage.
-5. **License request.** The PSSH triggers the **MediaDrm / CDM** subsystem. It builds a *challenge* and the player sends it to your license endpoint. Our endpoint is `POST /license/clearkey` with `X-Content-Id` header (so backend knows which KID/CEK to look up).
+5. **License request.** The PSSH triggers the **MediaDrm / CDM** subsystem. It builds a *challenge* and the player sends it to your license endpoint. Our endpoint is `POST /license/clearkey` with `X-Content-Id` header (so backend knows which KID/CEK to look up). The path is scheme-specific here for clarity; in production you'd typically expose a single `/license` and dispatch on the challenge's protection system.
 6. **License response.** Backend validates the JWT, checks the user has an `Entitlement` row for this content, looks up the KID/CEK in the database, and returns the W3C-EME-format JSON:
    ```json
    { "keys": [ { "kty": "oct", "kid": "<base64url KID>", "k": "<base64url CEK>" } ], "type": "temporary" }
    ```
+   **Widevine equivalent:** an opaque binary blob, signed by the license server and encrypted to the device's per-instance public key. Your app never parses it; it just forwards bytes between the CDM and the server.
 7. **Decryption.** Player passes the license to the CDM. From this point segments are decrypted on the fly. Decoded frames are rendered. You never see the CEK in JS/Kotlin — it lives in CDM-managed memory.
 
-> 💡 With real Widevine the license response is a binary blob that's itself encrypted to the device's per-instance key. With ClearKey there's no such wrapping — it's just the AES key in JSON. That's why ClearKey is not "real" DRM but is great for demos.
+> 💡 ClearKey vs Widevine on the wire: ClearKey ships the raw AES key in JSON, so anyone who sees the response can decrypt the content — that's why it's a test scheme, not real DRM. Widevine wraps the key in a device-bound binary blob the CDM unwraps in a trusted execution environment. Same backend role (entitlement check + key lookup), very different response payload.
 
 ---
 
@@ -262,6 +263,8 @@ The KID ends up inside the manifest (public — identifies *which* key is needed
 4. Embeds a **PSSH** block listing the KID + Widevine system ID (`--protection_systems Widevine --pssh ""`).
 5. Emits `video.mp4` + `audio.mp4` (init + numbered fragments), plus a DASH `.mpd` manifest and an HLS `.m3u8` master (the latter is unused by the Android app but emitted for free).
 
+Note the packager declares **Widevine** in the PSSH, not ClearKey. ClearKey CDMs can still decrypt the content because they match on KID, ignoring the protection-system ID — so the *same packaged bytes* would serve a real Widevine deployment unchanged. The only thing that swaps is the license endpoint (returning a Widevine-signed blob instead of ClearKey JSON). That's the point: packaging is decoupled from the DRM scheme.
+
 `packager/package-clear.sh` runs the same tool *without* the encryption / protection-system / pssh flags, so segments are unencrypted and the manifest contains no PSSH. The Android player handles both with identical code; only the absence of `drmConfig` on the play-manifest response distinguishes them.
 
 ### Step 4 — Upload to R2
@@ -328,7 +331,11 @@ This is functionally identical to `restoreKeys` for ClearKey — the JSON-encode
 
 ### Client-side license TTL + auto-cleanup
 
-`OfflineLicenseStore` enforces a short POC TTL (`LICENSE_TTL_MS = 60_000L`, i.e. 60 s) on the cached license. `expiriesFlow` emits `contentId → expiryAt` whenever stored licenses change. `DownloadRepository` observes it and schedules a per-content cleanup job that, on expiry, calls `downloadManager.removeDownload(id)` and clears the license entry — so an expired offline title automatically reverts to online-only and disappears from the offline catalog. The catalog UI shows a live countdown so this is visible by hand. Bump the constant for production-realistic windows.
+> ⚠️ **This is a fake timer, not real DRM enforcement.** It exists to illustrate *what* an offline window feels like in the UI, not to demonstrate that DRM is enforcing it. See [POC caveats](#15-known-limitations--poc-caveats) for the full story and the Widevine equivalent.
+
+`OfflineLicenseStore` enforces a short POC TTL (`LICENSE_TTL_MS = 60_000L`, i.e. 60 s) on the cached license. `expiriesFlow` emits `contentId → expiryAt` whenever stored licenses change. `DownloadRepository` observes it and schedules a per-content cleanup job that, on expiry, calls `downloadManager.removeDownload(id)` and clears the license entry — so an expired offline title automatically reverts to online-only and disappears from the offline catalog. The catalog UI shows a live countdown so this is visible by hand.
+
+What this is **not**: the ClearKey license response itself carries no expiry, the CDM doesn't know about the 60 s, and nothing in the secure key store is invalidated. A tampered client could ignore the timer and replay the cached license bytes forever — they're just base64 in DataStore. In a real Widevine deployment the license server embeds a signed `license_duration_seconds` in the persistent license, the CDM honors that duration inside its TEE/sandbox, and the app cannot extend it.
 
 ### Offline-aware catalog
 
@@ -564,7 +571,7 @@ The keystore (`android/app/release.keystore`) is **committed on purpose** — th
 - **`isMinifyEnabled = false`.** R8 / ProGuard is off for build simplicity.
 - **No HLS.** Apple platforms need HLS + FairPlay; this demo is DASH-only.
 - **Render free tier cold starts.** ~30s on first request after idle. Fine for demo, not for prod.
-- **Partial license-expiry enforcement.** Client enforces a POC 60 s TTL on the cached license bytes and auto-deletes the offline download on expiry. The backend's `OfflineLicense.expiresAt` row is recorded but not yet cross-checked or renewed against the client TTL.
+- **Offline-license TTL is a fake (client-side) timer.** The catalog's 60 s countdown is enforced by the Android app itself, not by the CDM. The ClearKey license JSON contains no expiry, and the cached license bytes sit in DataStore in plaintext base64 — a tampered build can ignore the timer entirely. Real DRM-enforced offline windows require Widevine/PlayReady/FairPlay, where the license server embeds a signed duration that the CDM honors inside a TEE. The backend's `OfflineLicense.expiresAt` row exists in the schema but is currently only written on the (unused) Widevine code path. Treat the demo's countdown as a UI illustration of the concept, not a security control.
 
 ---
 
