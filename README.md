@@ -21,15 +21,16 @@ This README is written for someone who has **never worked with DRM before**. By 
 4. [DRM playback flow — diagram + walkthrough](#4-drm-playback-flow--diagram--walkthrough)
 5. [Non-DRM (clear) playback](#5-non-drm-clear-playback)
 6. [Audio-only playback](#6-audio-only-playback)
-7. [Offline playback (and offline licenses)](#7-offline-playback-and-offline-licenses)
-8. [What this project actually does](#8-what-this-project-actually-does)
-9. [Architecture diagram](#9-architecture-diagram)
-10. [Services used](#10-services-used)
-11. [Repo layout](#11-repo-layout)
-12. [Local setup](#12-local-setup)
-13. [Deployment](#13-deployment)
-14. [Known limitations / POC caveats](#14-known-limitations--poc-caveats)
-15. [Glossary index](#15-glossary-index)
+7. [From MP4 to streamable content — packaging pipeline](#7-from-mp4-to-streamable-content--packaging-pipeline)
+8. [Offline playback (and offline licenses)](#8-offline-playback-and-offline-licenses)
+9. [What this project actually does](#9-what-this-project-actually-does)
+10. [Architecture diagram](#10-architecture-diagram)
+11. [Services used](#11-services-used)
+12. [Repo layout](#12-repo-layout)
+13. [Local setup](#13-local-setup)
+14. [Deployment](#14-deployment)
+15. [Known limitations / POC caveats](#15-known-limitations--poc-caveats)
+16. [Glossary index](#16-glossary-index)
 
 ---
 
@@ -85,7 +86,7 @@ You will see these acronyms everywhere. Skim now, refer back later.
 | **Shaka Packager** | Google's open-source CLI for packaging mezzanine → DASH/HLS with optional encryption. |
 | **HDCP** | A handshake between device and display that prevents capturing protected video over HDMI. DRM enforces it. |
 | **Offline license** | A license that survives device reboots and works without network, usually with a server-imposed TTL. |
-| **Keyset ID** | Opaque handle the CDM gives you after a successful license fetch. You store it, and later "restore" the license without contacting the server. (Real Widevine supports this; emulator ClearKey doesn't — see [POC caveats](#14-known-limitations--poc-caveats).) |
+| **Keyset ID** | Opaque handle the CDM gives you after a successful license fetch. You store it, and later "restore" the license without contacting the server. (Real Widevine supports this; emulator ClearKey doesn't — see [POC caveats](#15-known-limitations--poc-caveats).) |
 
 ---
 
@@ -214,7 +215,87 @@ DRM mechanics are identical: you encrypt the audio CMAF segments under a CEK, sh
 
 ---
 
-## 7. Offline playback (and offline licenses)
+## 7. From MP4 to streamable content — packaging pipeline
+
+Before any of the playback flow above can work, somebody has to turn the original `.mp4` into the format the player expects: a manifest plus many small (optionally encrypted) segments sitting on a CDN, with metadata seeded into the backend so the license endpoint knows which key to hand out. This section follows one MP4 end-to-end.
+
+```
+┌──────────────┐   shaka-packager   ┌──────────────────┐    upload      ┌──────────────┐
+│  mezzanine   │ ─────────────────► │ DASH manifest    │ ─────────────► │ Cloudflare R2│
+│ (Big Buck    │                    │  + CMAF segments │                │ vod/drm-bbb/ │
+│  Bunny .mp4) │                    │  (encrypted +    │                │ vod/clear-…/ │
+└──────────────┘                    │   PSSH for DRM)  │                └──────┬───────┘
+                                    └──────────────────┘                       │
+                                                                               │
+   ┌──────────────────────────────────┐                ┌────────────────┐      │
+   │ Postgres: Content row            │ ◄── seed.ts ── │ KID / CEK pair │      │
+   │   { id, manifestUrl, kid, cek }  │                │ (package.sh)   │      │
+   └──────────────┬───────────────────┘                └────────────────┘      │
+                  │                                                            │
+                  │  /catalog → /play-manifest → manifest proxy ───────────────┘
+                  ▼
+            Android player
+```
+
+### Step 1 — Mezzanine
+
+The input is a single high-quality MP4 (Big Buck Bunny, ~350 MB). `packager/download-sample.sh` pulls it once. In production this would be the master file delivered by post-production.
+
+### Step 2 — Pick a KID/CEK (DRM path only)
+
+A **KID** (16-byte Key ID, public) and a **CEK** (16-byte AES key, secret) are chosen up front. `packager/package.sh` hardcodes Google's published Widevine UAT test pair:
+
+```
+KID = abba271e8bcf552bbd2e86a434a9a5d9
+CEK = 69eaa802a6763af979e0d6ed5e2c4ed7
+```
+
+The KID ends up inside the manifest (public — identifies *which* key is needed). The CEK lives only in the backend `Content` row and is handed to the player exclusively via the license endpoint.
+
+### Step 3 — Run Shaka Packager
+
+`packager/package.sh` calls `shaka-packager` once. It:
+
+1. Demuxes the MP4 into separate video and audio streams.
+2. Splits each into ~4 s CMAF fragments (`--segment_duration 4`).
+3. AES-CTR-encrypts each fragment with the CEK using the CENC `cenc` scheme (`--enable_raw_key_encryption --protection_scheme cenc`).
+4. Embeds a **PSSH** block listing the KID + Widevine system ID (`--protection_systems Widevine --pssh ""`).
+5. Emits `video.mp4` + `audio.mp4` (init + numbered fragments), plus a DASH `.mpd` manifest and an HLS `.m3u8` master (the latter is unused by the Android app but emitted for free).
+
+`packager/package-clear.sh` runs the same tool *without* the encryption / protection-system / pssh flags, so segments are unencrypted and the manifest contains no PSSH. The Android player handles both with identical code; only the absence of `drmConfig` on the play-manifest response distinguishes them.
+
+### Step 4 — Upload to R2
+
+The packaged folder (`out/drm/` or `out/clear/`) is copied to Cloudflare R2 under a stable prefix (`vod/drm-bbb/`, `vod/clear-bbb/`). R2 is private — only the backend has credentials. The bucket is never reached directly by the app; segment + manifest fetches go through the backend proxy.
+
+### Step 5 — Seed the backend
+
+`backend/prisma/seed.ts` inserts one `Content` row per packaged title:
+
+| Column | Value |
+|---|---|
+| `id` | `drm-test` / `clear-test` |
+| `manifestUrl` | R2 object key for the `.mpd` (e.g. `vod/drm-bbb/manifest.mpd`) |
+| `kid` | the KID hex (DRM only) |
+| `cek` | the CEK hex (DRM only) |
+| `drm` | `true` / `false` |
+
+The KID/CEK on this row **must match** the values used at packaging time. If you re-run `package.sh` with different keys, update the seed and re-apply it — otherwise the license endpoint will hand out a CEK that doesn't decrypt the segments and playback silently dies.
+
+### Step 6 — Serve through the backend
+
+At playback time:
+
+- `GET /catalog` returns the list of `Content` rows (without `cek`).
+- `GET /play-manifest/:id` returns the public manifest URL plus, for DRM content, the license endpoint URL and any required headers.
+- The manifest is fetched through a proxy route so segment URLs can be rewritten through the backend — that's what allows per-request auth on segment fetches and keeps R2 credentials out of the client.
+- `POST /license/clearkey` (with `X-Content-Id` header) looks up the row, reads `cek`, and returns the W3C-EME-format JSON `{ keys: [{ kty, kid, k }] }` that the CDM expects.
+
+That's the full path: a raw MP4 turns into a public manifest + private CEK split between R2 and Postgres, glued together at runtime by the manifest proxy and the license endpoint. From here on the [DRM playback flow](#4-drm-playback-flow--diagram--walkthrough) takes over.
+
+---
+
+## 8. Offline playback (and offline licenses)
 
 Offline = "user is on a plane / in a tunnel, app must still play the video".
 
@@ -260,7 +341,7 @@ The catalog screen also reacts to network state and download state:
 
 ---
 
-## 8. What this project actually does
+## 9. What this project actually does
 
 A complete vertical slice of the above, end-to-end:
 
@@ -297,7 +378,7 @@ A complete vertical slice of the above, end-to-end:
 
 ---
 
-## 9. Architecture diagram
+## 10. Architecture diagram
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────────┐
@@ -341,7 +422,7 @@ The backend proxies all R2 access. Reasons: simpler CORS, allows per-request aut
 
 ---
 
-## 10. Services used
+## 11. Services used
 
 | Service | Tier | Purpose | Why this one |
 |---|---|---|---|
@@ -356,7 +437,7 @@ The backend proxies all R2 access. Reasons: simpler CORS, allows per-request aut
 
 ---
 
-## 11. Repo layout
+## 12. Repo layout
 
 ```
 drm-e2e-demo/
@@ -401,7 +482,7 @@ drm-e2e-demo/
 
 ---
 
-## 12. Local setup
+## 13. Local setup
 
 ### Prerequisites
 
@@ -451,7 +532,7 @@ The KID/CEK in `package.sh` must match what's in the database (`Content.kid` / `
 
 ---
 
-## 13. Deployment
+## 14. Deployment
 
 ### Backend (Render + Neon)
 
@@ -474,7 +555,7 @@ The keystore (`android/app/release.keystore`) is **committed on purpose** — th
 
 ---
 
-## 14. Known limitations / POC caveats
+## 15. Known limitations / POC caveats
 
 - **ClearKey, not Widevine.** Real DRM needs a license server with privacy keys. Switching to Widevine is documented but not wired.
 - **Emulator CDM oddities.** Android emulator's ClearKey implementation lacks `MediaDrm.restoreKeys`, so we cache the license response bytes instead. On a real device with Widevine you'd use `restoreKeys` + `keysetId`.
@@ -487,7 +568,7 @@ The keystore (`android/app/release.keystore`) is **committed on purpose** — th
 
 ---
 
-## 15. Glossary index
+## 16. Glossary index
 
 Quick links back to the cheat sheet:
 
